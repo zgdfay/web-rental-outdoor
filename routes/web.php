@@ -74,9 +74,10 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->group(function () {
     Route::put('/gears/{gear}', [AdminGearController::class, 'update'])->name('admin.gears.update');
     Route::delete('/gears/{gear}', [AdminGearController::class, 'destroy'])->name('admin.gears.destroy');
     Route::get('/reports', [AdminReportController::class, 'index'])->name('admin.reports');
+    Route::get('/bookings', function () { return redirect()->route('staff.bookings'); })->name('admin.bookings');
 });
 
-Route::middleware(['auth', 'role:staff'])->prefix('staff')->group(function () {
+Route::middleware(['auth', 'role:staff,admin'])->prefix('staff')->group(function () {
     Route::get('/bookings', [StaffBookingController::class, 'index'])->name('staff.bookings');
     Route::post('/bookings/{booking}/validate', [StaffBookingController::class, 'validateBooking'])->name('staff.bookings.validate');
     Route::post('/bookings/{booking}/handover', [StaffBookingController::class, 'handover'])->name('staff.bookings.handover');

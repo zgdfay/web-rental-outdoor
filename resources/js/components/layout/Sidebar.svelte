@@ -11,6 +11,7 @@
         admin: [
             { name: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },
             { name: 'Inventory', icon: Package, href: '/admin/gears' },
+            { name: 'Bookings', icon: CalendarClock, href: '/staff/bookings' },
             { name: 'Reports', icon: TrendingUp, href: '/admin/reports' },
         ],
         staff: [

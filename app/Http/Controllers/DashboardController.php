@@ -29,7 +29,7 @@ class DashboardController extends Controller
             return inertia('admin/dashboard', [
                 'stats' => [
                     'total_revenue' => Booking::whereIn('status', ['validated', 'handed_over', 'returned'])->sum('total_price'),
-                    'customers' => User::where('role', 'user')->count(),
+                    'customers' => Booking::whereNotNull('customer_phone')->distinct('customer_phone')->count('customer_phone'),
                     'active_rentals' => Booking::where('status', 'handed_over')->count(),
                     'inventory' => Gear::count(),
                     'revenue_chart' => $monthlyChart,

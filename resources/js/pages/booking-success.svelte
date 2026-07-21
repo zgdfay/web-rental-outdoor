@@ -1,6 +1,6 @@
 <script>
     import { Link } from '@inertiajs/svelte';
-    import { CheckCircle2, ChevronLeft, ShieldCheckIcon, InfoIcon, MapPinIcon } from 'lucide-svelte';
+    import { CheckCircle2, ChevronLeft, ShieldCheckIcon, InfoIcon, MapPinIcon, MessageSquare } from 'lucide-svelte';
     import { fly } from 'svelte/transition';
 
     let { product_name, rental_days, quantity, remaining_balance, name, phone, address, booked_items = [] } = $props();
@@ -21,6 +21,27 @@
             minimumFractionDigits: 0
         }).format(amount).replace('Rp', 'RP');
     }
+
+    const waPhone = $derived(() => {
+        let p = (phone || '').replace(/[^0-9]/g, '');
+        if (p.startsWith('0')) p = '62' + p.substring(1);
+        return p;
+    });
+
+    const waText = $derived(() => {
+        const itemsText = (booked_items && booked_items.length > 0)
+            ? booked_items.map(i => `${i.name} (${i.quantity}x)`).join(', ')
+            : `${product_name} (${quantity || 1}x)`;
+        return `🏕️ *OUTDOOR SPECIES - KONFIRMASI BOOKING* 🏕️\n\n` +
+               `Halo kak *${name}*,\n` +
+               `Terima kasih telah memesan alat outdoor di toko kami!\n\n` +
+               `📦 *Alat Dipesan*: ${itemsText}\n` +
+               `⏱️ *Durasi Sewa*: ${rental_days} Hari\n` +
+               `📅 *Ambil*: ${formatDate(today)}\n` +
+               `📅 *Kembali*: ${formatDate(returnDate)}\n` +
+               `💰 *Sisa Pelunasan*: *${formatCurrency(remaining_balance)}* (Dibayar saat pengambilan alat)\n\n` +
+               `Mohon membawa KTP Asli saat pengambilan alat di toko Outdoor Species.`;
+    });
 </script>
 
 <svelte:head>
@@ -123,8 +144,17 @@
                     </div>
                 </div>
 
-                <div class="pt-4">
-                    <Link href="/catalog" class="inline-flex px-12 py-5 bg-zinc-900 text-white rounded-2xl font-black uppercase tracking-[0.2em] text-[11px] hover:bg-zinc-800 transition-all shadow-2xl shadow-zinc-900/20">
+                <div class="pt-4 flex flex-col sm:flex-row items-center justify-center gap-4">
+                    <a 
+                        href={`https://wa.me/${waPhone()}?text=${encodeURIComponent(waText())}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="inline-flex items-center gap-2.5 px-8 py-5 bg-[#25D366] text-white rounded-2xl font-black uppercase tracking-[0.1em] text-[11px] hover:bg-[#20bd5a] transition-all shadow-xl shadow-[#25D366]/20 w-full sm:w-auto justify-center"
+                    >
+                        <MessageSquare size={18} />
+                        Buka Salinan di WhatsApp
+                    </a>
+                    <Link href="/catalog" class="inline-flex px-10 py-5 bg-zinc-900 text-white rounded-2xl font-black uppercase tracking-[0.1em] text-[11px] hover:bg-zinc-800 transition-all shadow-xl shadow-zinc-900/20 w-full sm:w-auto justify-center">
                         Return to Catalog
                     </Link>
                 </div>

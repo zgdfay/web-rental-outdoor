@@ -1,7 +1,7 @@
 <script>
     import Sidebar from '@/components/layout/Sidebar.svelte';
     import { router } from '@inertiajs/svelte';
-    import { CalendarClock, CheckCircle, PackageCheck, RotateCcw, Search, Filter, ShieldCheck, User, Phone, MapPin, CreditCard, Info, Eye, Printer, Bluetooth } from 'lucide-svelte';
+    import { CalendarClock, CheckCircle, PackageCheck, RotateCcw, Search, Filter, ShieldCheck, User, Phone, MapPin, CreditCard, Info, Eye, Printer, Bluetooth, MessageSquare } from 'lucide-svelte';
     import { fly, fade } from 'svelte/transition';
     import * as Select from "@/components/ui/select/index.js";
     import * as Dialog from "@/components/ui/dialog/index.js";
@@ -269,6 +269,34 @@
         return new Date() > dueDate;
     }
 
+    function getWaUrl(booking) {
+        let p = (booking.customer_phone || '').replace(/[^0-9]/g, '');
+        if (p.startsWith('0')) p = '62' + p.substring(1);
+        
+        const name = booking.customer_name || 'Kak';
+        const gearName = booking.gear?.name || 'Alat Outdoor';
+        const qty = booking.quantity || 1;
+        
+        let text = `Halo kak *${name}*, dari *Outdoor Species*.\n\n`;
+        
+        if (booking.status === 'pending' || booking.status === 'validated') {
+            text += `Pemesanan sewa alat *${gearName} (${qty}x)* sudah dikonfirmasi dan siap untuk diambil di toko kami. Mohon membawa KTP asli dan sisa pelunasan saat pengambilan ya!`;
+        } else if (booking.status === 'handed_over') {
+            const dueDate = booking.start_date ? new Date(new Date(booking.start_date).getTime() + (booking.rental_days * 86400000)).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : 'segera';
+            if (isOverdue(booking)) {
+                text = `🚨 *OUTDOOR SPECIES - PERINGATAN KETERLAMBATAN (H+1)* 🚨\n\nHalo kak *${name}*,\nMasa penyewaan untuk alat *${gearName} (${qty}x)* telah *MELEWATI JATUH TEMPO* sejak ${dueDate}.\n\nSaat ini denda keterlambatan berjalan. Mohon untuk segera mengembalikan perlengkapan ke toko hari ini ya. Terima kasih!`;
+            } else {
+                text += `Masa sewa untuk alat *${gearName} (${qty}x)* berakhir pada *${dueDate}*. Mohon untuk dikembalikan tepat waktu agar terhindar dari denda keterlambatan ya. Terima kasih!`;
+            }
+        } else if (booking.status === 'returned') {
+            text += `Terima kasih telah mengembalikan alat *${gearName} (${qty}x)* ke Outdoor Species. Sampai jumpa di petualangan berikutnya!`;
+        } else {
+            text += `Mengenai pemesanan sewa alat *${gearName} (${qty}x)* Anda.`;
+        }
+        
+        return `https://wa.me/${p}?text=${encodeURIComponent(text)}`;
+    }
+
     function formatDueDate(booking) {
         const date = getDueDate(booking);
         if (!date) return '-';
@@ -400,6 +428,17 @@
                                 </td>
                                 <td class="px-6 py-4 text-right">
                                     <div class="flex items-center justify-end gap-2">
+                                        <a 
+                                            href={getWaUrl(booking)}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            class="flex items-center gap-1 px-2.5 py-1.5 bg-[#25D366] text-white rounded-md text-[10px] font-bold uppercase tracking-wider hover:bg-[#20bd5a] transition-all shadow-sm shrink-0"
+                                            title="Chat WhatsApp dengan Template Otomatis"
+                                        >
+                                            <MessageSquare size={12} />
+                                            WA
+                                        </a>
+
                                         <Button 
                                             variant="ghost" 
                                             size="icon"

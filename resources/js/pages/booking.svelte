@@ -165,16 +165,24 @@
                                     </div>
                                     <div class="space-y-1.5">
                                         <label for="phone" class="text-[11px] font-black uppercase tracking-wider text-zinc-400 ml-1">WhatsApp Number</label>
-                                        <div class="relative group">
-                                            <Phone class="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-300 group-focus-within:text-primary transition-colors" size={18} />
+                                        <div class="relative flex items-center bg-white border border-zinc-200 rounded-xl overflow-hidden focus-within:border-primary/50 focus-within:ring-4 focus-within:ring-primary/5 transition-all h-14">
+                                            <div class="flex items-center gap-2 pl-4 pr-3.5 bg-zinc-50 border-r border-zinc-200 h-full text-zinc-700 font-bold text-xs select-none shrink-0">
+                                                <span class="text-base leading-none">🇮🇩</span>
+                                                <span class="tracking-tight">+62</span>
+                                            </div>
                                             <input 
                                                 type="tel" 
                                                 id="phone" 
                                                 bind:value={$form.phone} 
-                                                oninput={(e) => $form.phone = e.target.value.replace(/\D/g, '')}
+                                                oninput={(e) => {
+                                                    let val = e.target.value.replace(/\D/g, '');
+                                                    if (val.startsWith('0')) val = val.substring(1);
+                                                    if (val.startsWith('62')) val = val.substring(2);
+                                                    $form.phone = val;
+                                                }}
                                                 inputmode="numeric"
-                                                placeholder="e.g. 0812345678" 
-                                                class="w-full h-14 bg-white border border-zinc-200 rounded-xl pl-12 pr-4 focus:border-primary/50 focus:ring-4 focus:ring-primary/5 transition-all outline-none text-zinc-900 font-medium" 
+                                                placeholder="81234567890" 
+                                                class="w-full h-full bg-transparent pl-3.5 pr-4 outline-none text-zinc-900 font-medium text-sm placeholder:text-zinc-400" 
                                                 required 
                                             />
                                         </div>

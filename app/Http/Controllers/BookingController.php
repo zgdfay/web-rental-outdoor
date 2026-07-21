@@ -7,6 +7,10 @@ use App\Models\Booking;
 use App\Models\Gear;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
+use App\Services\WhatsAppService;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class BookingController extends Controller
 {
@@ -42,48 +46,76 @@ class BookingController extends Controller
         $ktp_path = $request->file('ktp_file')->store('bookings/ktp', 'public');
         $transfer_path = $request->file('transfer_file')->store('bookings/transfer', 'public');
 
-        $totalRemaining = 0;
-        $totalQty = 0;
-        $bookedItemsSummary = [];
-
-        foreach ($items as $item) {
-            $gear = Gear::findOrFail($item['gear_id'] ?? $item['id']);
-            $qty = intval($item['quantity'] ?? 1);
-            if ($qty < 1) $qty = 1;
-
-            $total_price = $gear->price_per_day * $request->rental_days * $qty;
-            $dp_amount = ceil(($total_price * 0.3) / 1000) * 1000;
-            $remaining = $total_price - $dp_amount;
-
-            Booking::create([
-                'user_id' => auth()->id(),
-                'gear_id' => $gear->id,
-                'quantity' => $qty,
-                'customer_name' => $request->name,
-                'customer_phone' => $request->phone,
-                'customer_address' => $request->address,
-                'ktp_path' => $ktp_path,
-                'transfer_proof_path' => $transfer_path,
-                'rental_days' => $request->rental_days,
-                'start_date' => null,
-                'end_date' => null,
-                'total_price' => $total_price,
-                'dp_amount' => $dp_amount,
-                'remaining_balance' => $remaining,
-                'status' => 'pending',
-            ]);
-
-            $totalRemaining += $remaining;
-            $totalQty += $qty;
-            $bookedItemsSummary[] = [
-                'name' => $gear->name,
-                'quantity' => $qty,
-                'price_per_day' => $gear->price_per_day,
-                'total_price' => $total_price,
-            ];
+        $phoneFormatted = preg_replace('/[^0-9]/', '', $request->phone);
+        if (str_starts_with($phoneFormatted, '62')) {
+            $phoneFormatted = '0' . substr($phoneFormatted, 2);
+        } elseif (!str_starts_with($phoneFormatted, '0')) {
+            $phoneFormatted = '0' . $phoneFormatted;
         }
 
+        [$totalRemaining, $totalQty, $bookedItemsSummary] = DB::transaction(function () use ($items, $request, $phoneFormatted, $ktp_path, $transfer_path) {
+            $totalRemaining = 0;
+            $totalQty = 0;
+            $bookedItemsSummary = [];
+
+            foreach ($items as $item) {
+                $gearId = $item['gear_id'] ?? $item['id'];
+                $gear = Gear::where('id', $gearId)->lockForUpdate()->firstOrFail();
+                $qty = intval($item['quantity'] ?? 1);
+                if ($qty < 1) $qty = 1;
+
+                if ($gear->stock < $qty) {
+                    throw ValidationException::withMessages([
+                        'items' => "Stok untuk perlengkapan '{$gear->name}' tidak mencukupi (tersisa {$gear->stock} unit)."
+                    ]);
+                }
+
+                $total_price = $gear->price_per_day * $request->rental_days * $qty;
+                $dp_amount = ceil(($total_price * 0.3) / 1000) * 1000;
+                $remaining = $total_price - $dp_amount;
+
+                Booking::create([
+                    'user_id' => Auth::id(),
+                    'gear_id' => $gear->id,
+                    'quantity' => $qty,
+                    'customer_name' => $request->name,
+                    'customer_phone' => $phoneFormatted,
+                    'customer_address' => $request->address,
+                    'ktp_path' => $ktp_path,
+                    'transfer_proof_path' => $transfer_path,
+                    'rental_days' => $request->rental_days,
+                    'start_date' => null,
+                    'end_date' => null,
+                    'total_price' => $total_price,
+                    'dp_amount' => $dp_amount,
+                    'remaining_balance' => $remaining,
+                    'status' => 'pending',
+                ]);
+
+                $totalRemaining += $remaining;
+                $totalQty += $qty;
+                $bookedItemsSummary[] = [
+                    'name' => $gear->name,
+                    'quantity' => $qty,
+                    'price_per_day' => $gear->price_per_day,
+                    'total_price' => $total_price,
+                ];
+            }
+
+            return [$totalRemaining, $totalQty, $bookedItemsSummary];
+        });
+
         $productNames = implode(', ', array_column($bookedItemsSummary, 'name'));
+
+        // Kirim notifikasi WhatsApp otomatis saat booking berhasil dibuat
+        WhatsAppService::sendBookingConfirmation(
+            $phoneFormatted,
+            $request->name,
+            $productNames,
+            $totalQty,
+            $request->rental_days,
+            $totalRemaining
+        );
 
         return to_route('booking.success', [
             'product_name' => $productNames,
@@ -91,7 +123,7 @@ class BookingController extends Controller
             'quantity' => $totalQty,
             'remaining_balance' => $totalRemaining,
             'name' => $request->name,
-            'phone' => $request->phone,
+            'phone' => $phoneFormatted,
             'address' => $request->address,
             'booked_items' => $bookedItemsSummary,
         ]);

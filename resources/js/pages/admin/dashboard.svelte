@@ -59,7 +59,7 @@
                     </div>
                     <div>
                         <p class="text-2xl font-bold text-zinc-900">{stats.customers}</p>
-                        <p class="text-[10px] text-zinc-400 font-medium">Registered users</p>
+                        <p class="text-[10px] text-zinc-400 font-medium">Unique penyewa (No. HP)</p>
                     </div>
                 </div>
 
