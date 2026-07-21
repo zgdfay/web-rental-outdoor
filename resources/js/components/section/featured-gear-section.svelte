@@ -1,6 +1,7 @@
 <script>
-    import { Star, Package, ArrowRight } from 'lucide-svelte';
+    import { Star, Package, ArrowRight, ShoppingBag } from 'lucide-svelte';
     import { Link } from '@inertiajs/svelte';
+    import { cart } from '@/stores/cart.svelte.js';
 
     let { gears = [] } = $props();
 
@@ -58,19 +59,31 @@
                             </h3>
                         </div>
 
-                        <div class="mt-auto flex items-end justify-between">
+                        <div class="mt-auto flex flex-col">
                             <div class="flex flex-col">
-                                <span class="text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 mb-1 {gear.stock > 0 ? 'text-zinc-400' : 'text-rose-500'}">
+                                <span class="text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 {gear.stock > 0 ? 'text-zinc-400' : 'text-red-500'}">
                                     Available: {gear.stock} units
                                 </span>
-                                <span class="text-xl font-black text-zinc-900 dark:text-white leading-none">{formatCurrency(gear.price_per_day)}<span class="text-[10px] font-medium text-zinc-400 ml-1">/day</span></span>
+                                <span class="text-xl font-black text-zinc-900 dark:text-white leading-none mt-1">{formatCurrency(gear.price_per_day)}<span class="text-[10px] font-medium text-zinc-400 ml-1">/day</span></span>
                             </div>
-                             <Link
-                                href={`/booking?id=${gear.id}&name=${encodeURIComponent(gear.name)}&price=${gear.price_per_day}&stock=${gear.stock}&image_path=${encodeURIComponent(gear.image_path || '')}`} 
-                                disabled={gear.stock === 0}
-                                class="inline-flex items-center justify-center px-5 py-3 bg-primary text-white font-semibold uppercase text-xs rounded-xl transition-all hover:bg-primary/90 {gear.stock === 0 ? 'bg-zinc-200 text-zinc-400 dark:bg-zinc-800 pointer-events-none' : ''}">
-                                {gear.stock > 0 ? 'Rent Now' : 'Out of Stock'}
-                            </Link>
+                            <div class="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-zinc-100 dark:border-zinc-800/60">
+                                <button
+                                    type="button"
+                                    onclick={(e) => { e.preventDefault(); cart.addItem(gear); }}
+                                    disabled={gear.stock === 0}
+                                    class="inline-flex items-center justify-center px-3 py-2.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white font-bold uppercase text-xs rounded-xl transition-all hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-40 disabled:pointer-events-none gap-1.5 w-full"
+                                    title="Tambah ke Keranjang"
+                                >
+                                    <ShoppingBag size={14} class={cart.isInCart(gear.id) ? 'text-primary shrink-0' : 'shrink-0'} />
+                                    <span class="truncate">{cart.isInCart(gear.id) ? '+ Lagi' : '+ Cart'}</span>
+                                </button>
+                                <Link
+                                    href={`/booking?id=${gear.id}&name=${encodeURIComponent(gear.name)}&price=${gear.price_per_day}&stock=${gear.stock}&image_path=${encodeURIComponent(gear.image_path || '')}`} 
+                                    disabled={gear.stock === 0}
+                                    class="inline-flex items-center justify-center px-3 py-2.5 bg-primary text-white font-bold uppercase text-xs rounded-xl transition-all hover:bg-primary/90 {gear.stock === 0 ? 'bg-zinc-200 text-zinc-400 dark:bg-zinc-800 pointer-events-none' : ''} w-full truncate">
+                                    {gear.stock > 0 ? 'Rent' : 'Out'}
+                                </Link>
+                            </div>
                         </div>
                     </div>
                 </div>

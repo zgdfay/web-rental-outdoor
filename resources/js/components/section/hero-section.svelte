@@ -25,9 +25,9 @@
             </p>
 
             <div class="flex flex-wrap items-center gap-6 pt-4">
-                <button class="px-8 py-4 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-full flex items-center gap-3 transition-all transform hover:scale-105 shadow-xl shadow-primary/40">
+                <a href="/catalog" class="px-8 py-4 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-full flex items-center gap-3 transition-all transform hover:scale-105 shadow-xl shadow-primary/40 inline-flex">
                     Rent Now <ArrowRight size={20} />
-                </button>
+                </a>
                 
                 <button class="flex items-center gap-3 text-white font-medium group">
                     <div class="size-12 rounded-full border border-white/20 flex items-center justify-center group-hover:bg-white/10 transition-all">

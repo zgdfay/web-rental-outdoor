@@ -1,6 +1,6 @@
 <script>
     import { Link, page } from '@inertiajs/svelte';
-    import { LayoutDashboard, Package, CalendarClock, LogOut, User, ChevronRight } from 'lucide-svelte';
+    import { LayoutDashboard, Package, CalendarClock, LogOut, User, ChevronRight, TrendingUp } from 'lucide-svelte';
     import * as Dialog from "@/components/ui/dialog/index.js";
     import { Button } from "@/components/ui/button/index.js";
 
@@ -11,6 +11,7 @@
         admin: [
             { name: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },
             { name: 'Inventory', icon: Package, href: '/admin/gears' },
+            { name: 'Reports', icon: TrendingUp, href: '/admin/reports' },
         ],
         staff: [
             { name: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },

@@ -1,9 +1,10 @@
 <script>
     import Navbar from '@/components/layout/navbar.svelte';
     import Footer from '@/components/layout/footer.svelte';
-    import { Search, Filter, Star, SlidersHorizontal, ChevronDown, X, Package } from 'lucide-svelte';
+    import FeaturedGear from '@/components/section/featured-gear-section.svelte';
+    import { Search, Filter, Star, SlidersHorizontal, ChevronDown, X, Package, ShoppingBag, Check } from 'lucide-svelte';
     import { Link } from '@inertiajs/svelte';
-
+    import { cart } from '@/stores/cart.svelte.js';
 
     // Shadcn Components
     import { Input } from "@/components/ui/input";
@@ -14,7 +15,7 @@
     import { Button } from "@/components/ui/button/index.js";
 
     // Mockup data for catalog
-    let { gears = [] } = $props();
+    let { gears = [], featured_gears = [] } = $props();
 
     const categories = [
         { name: 'Hiking', count: gears.filter(g => g.category === 'Hiking').length },
@@ -121,6 +122,10 @@
             </div>
         </div>
     </div>
+
+    {#if featured_gears && featured_gears.length > 0}
+        <FeaturedGear gears={featured_gears} />
+    {/if}
 
     <main class="max-w-7xl mx-auto px-6 py-12">
         <div class="flex flex-col lg:flex-row gap-8 items-start">
@@ -308,19 +313,33 @@
                                         </h3>
                                     </div>
 
-                                    <div class="mt-auto flex items-end justify-between">
-                                        <div class="flex flex-col">
-                                            <span class="text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 mb-1 {product.stock > 0 ? 'text-zinc-400' : 'text-red-500'}">
-                                                Available: {product.stock} units
-                                            </span>
-                                            <span class="text-xl font-black text-zinc-900 dark:text-white">{formatCurrency(product.price_per_day)}</span>
+                                    <div class="mt-auto flex flex-col gap-3 pt-3 border-t border-zinc-100 dark:border-zinc-800/60">
+                                        <div class="flex items-baseline justify-between">
+                                            <div class="flex flex-col">
+                                                <span class="text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 {product.stock > 0 ? 'text-zinc-400' : 'text-red-500'}">
+                                                    Available: {product.stock} units
+                                                </span>
+                                                <span class="text-xl font-black text-zinc-900 dark:text-white leading-none mt-1">{formatCurrency(product.price_per_day)}<span class="text-[10px] font-medium text-zinc-400 ml-1">/hari</span></span>
+                                            </div>
                                         </div>
-                                        <Link
-                                            href={`/booking?id=${product.id}&name=${encodeURIComponent(product.name)}&price=${product.price_per_day}&stock=${product.stock}&image_path=${encodeURIComponent(product.image_path || '')}`} 
-                                            disabled={product.stock === 0}
-                                            class="inline-flex items-center justify-center px-6 py-3 bg-primary text-white font-semibold uppercase text-xs rounded-xl transition-all hover:bg-primary/90 {product.stock === 0 ? 'bg-zinc-200 text-zinc-400 dark:bg-zinc-800 pointer-events-none' : ''}">
-                                            {product.stock > 0 ? 'Rent' : 'N/A'}
-                                        </Link>
+                                        <div class="grid grid-cols-2 gap-2">
+                                            <button
+                                                type="button"
+                                                onclick={(e) => { e.preventDefault(); cart.addItem(product); }}
+                                                disabled={product.stock === 0}
+                                                class="inline-flex items-center justify-center px-3 py-2.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white font-bold uppercase text-xs rounded-xl transition-all hover:bg-zinc-200 dark:hover:bg-zinc-700 disabled:opacity-40 disabled:pointer-events-none gap-1.5 w-full"
+                                                title="Tambah ke Keranjang"
+                                            >
+                                                <ShoppingBag size={14} class={cart.isInCart(product.id) ? 'text-primary shrink-0' : 'shrink-0'} />
+                                                <span class="truncate">{cart.isInCart(product.id) ? '+ Lagi' : '+ Cart'}</span>
+                                            </button>
+                                            <Link
+                                                href={`/booking?id=${product.id}&name=${encodeURIComponent(product.name)}&price=${product.price_per_day}&stock=${product.stock}&image_path=${encodeURIComponent(product.image_path || '')}`} 
+                                                disabled={product.stock === 0}
+                                                class="inline-flex items-center justify-center px-3 py-2.5 bg-primary text-white font-bold uppercase text-xs rounded-xl transition-all hover:bg-primary/90 {product.stock === 0 ? 'bg-zinc-200 text-zinc-400 dark:bg-zinc-800 pointer-events-none' : ''} w-full truncate">
+                                                {product.stock > 0 ? 'Rent' : 'N/A'}
+                                            </Link>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

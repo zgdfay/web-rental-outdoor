@@ -144,9 +144,13 @@
         payload.push(...encoder.encode(`Total       : ${formatRupiah(booking.total_price)}\n`));
         payload.push(...encoder.encode(`DP Dibayar  : ${formatRupiah(booking.dp_amount)}\n`));
         payload.push(...encoder.encode(`Pelunasan   : ${formatRupiah(booking.remaining_balance)}\n`));
+        if (booking.fine_amount && booking.fine_amount > 0) {
+            payload.push(...encoder.encode(`Denda       : ${formatRupiah(booking.fine_amount)}\n`));
+        }
         payload.push(...encoder.encode("--------------------------------\n"));
         payload.push(...escBoldOn);
-        payload.push(...encoder.encode("STATUS      : LUNAS\n"));
+        const statusText = booking.status === 'returned' ? 'SELESAI (RETURNED)' : 'LUNAS (HANDED OVER)';
+        payload.push(...encoder.encode(`STATUS      : ${statusText}\n`));
         payload.push(...escBoldOff);
         payload.push(...encoder.encode("================================\n"));
         
@@ -425,6 +429,7 @@
                                             <button 
                                                 onclick={() => printReceipt(booking)}
                                                 class="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-100 text-zinc-900 rounded-md text-[10px] font-bold uppercase tracking-wider hover:bg-zinc-200 transition-all border border-zinc-200"
+                                                title="Cetak Struk"
                                             >
                                                 <Printer size={12} />
                                                 Print Struk
@@ -437,7 +442,15 @@
                                                 Return
                                             </button>
                                         {:else}
-                                            <span class="text-[10px] font-bold text-zinc-300 uppercase tracking-widest px-2">Completed</span>
+                                            <button 
+                                                onclick={() => printReceipt(booking)}
+                                                class="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-white rounded-md text-[10px] font-bold uppercase tracking-wider hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-all border border-zinc-200 dark:border-zinc-700"
+                                                title="Cetak Struk Kembali"
+                                            >
+                                                <Printer size={12} />
+                                                Print Struk
+                                            </button>
+                                            <span class="text-[10px] font-bold text-zinc-400 uppercase tracking-widest px-2">Completed</span>
                                         {/if}
                                     </div>
                                 </td>
@@ -593,10 +606,16 @@
             <span>Pelunasan</span>
             <span>{formatRupiah(printingBooking.remaining_balance)}</span>
         </div>
+        {#if printingBooking.fine_amount && printingBooking.fine_amount > 0}
+            <div class="flex justify-between text-red-600 font-bold">
+                <span>Denda Keterlambatan</span>
+                <span>{formatRupiah(printingBooking.fine_amount)}</span>
+            </div>
+        {/if}
         <div class="border-t border-dashed border-black my-1"></div>
         <div class="flex justify-between font-bold text-sm">
             <span>STATUS</span>
-            <span>LUNAS</span>
+            <span>{printingBooking.status === 'returned' ? 'SELESAI (RETURNED)' : 'LUNAS'}</span>
         </div>
     </div>
 

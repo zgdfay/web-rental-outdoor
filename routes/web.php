@@ -17,7 +17,10 @@ Route::get('/', function () {
 
 Route::get('/catalog', function () {
     return Inertia::render('catalog', [
-        'gears' => Gear::where('is_featured', false)->latest()->get(),
+        'canLogin' => Route::has('login'),
+        'canRegister' => Route::has('register'),
+        'gears' => Gear::latest()->get(),
+        'featured_gears' => Gear::where('is_featured', true)->latest()->get(),
     ]);
 })->name('catalog');
 
@@ -59,6 +62,7 @@ Route::get('/booking/success', function () {
 
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Admin\GearController as AdminGearController;
+use App\Http\Controllers\Admin\ReportController as AdminReportController;
 use App\Http\Controllers\Staff\BookingController as StaffBookingController;
 
 Route::get('/dashboard', [DashboardController::class, 'index'])
@@ -69,6 +73,7 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->group(function () {
     Route::post('/gears', [AdminGearController::class, 'store'])->name('admin.gears.store');
     Route::put('/gears/{gear}', [AdminGearController::class, 'update'])->name('admin.gears.update');
     Route::delete('/gears/{gear}', [AdminGearController::class, 'destroy'])->name('admin.gears.destroy');
+    Route::get('/reports', [AdminReportController::class, 'index'])->name('admin.reports');
 });
 
 Route::middleware(['auth', 'role:staff'])->prefix('staff')->group(function () {

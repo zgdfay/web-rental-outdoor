@@ -3,7 +3,7 @@
     import { CheckCircle2, ChevronLeft, ShieldCheckIcon, InfoIcon, MapPinIcon } from 'lucide-svelte';
     import { fly } from 'svelte/transition';
 
-    let { product_name, rental_days, quantity, remaining_balance, name, phone, address } = $props();
+    let { product_name, rental_days, quantity, remaining_balance, name, phone, address, booked_items = [] } = $props();
 
     const today = new Date();
     const returnDate = new Date();
@@ -59,11 +59,21 @@
                                     <span class="text-sm text-zinc-900 font-bold">{phone}</span>
                                 </div>
                                 <div class="flex justify-between border-b border-zinc-200/50 pb-3">
-                                    <span class="text-sm text-zinc-500 font-medium">Item Name</span>
-                                    <span class="text-sm text-zinc-900 font-bold">{product_name}</span>
+                                    <span class="text-sm text-zinc-500 font-medium">Items Booked</span>
+                                    <div class="text-right">
+                                        {#if booked_items && booked_items.length > 0}
+                                            <div class="space-y-1">
+                                                {#each booked_items as item}
+                                                    <p class="text-sm text-zinc-900 font-bold">{item.name} <span class="text-primary text-xs">({item.quantity}x)</span></p>
+                                                {/each}
+                                            </div>
+                                        {:else}
+                                            <span class="text-sm text-zinc-900 font-bold">{product_name} ({quantity || 1}x)</span>
+                                        {/if}
+                                    </div>
                                 </div>
                                 <div class="flex justify-between border-b border-zinc-200/50 pb-3">
-                                    <span class="text-sm text-zinc-500 font-medium">Quantity</span>
+                                    <span class="text-sm text-zinc-500 font-medium">Total Units</span>
                                     <span class="text-sm text-zinc-900 font-bold">{quantity || 1} Unit(s)</span>
                                 </div>
                                 <div class="flex justify-between border-b border-zinc-200/50 pb-3">
