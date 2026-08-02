@@ -2,15 +2,18 @@
     import { Link, useForm, router } from '@inertiajs/svelte';
     import Navbar from '@/components/layout/navbar.svelte';
     import Footer from '@/components/layout/footer.svelte';
-    import { User, Phone, Mail, MapPin, CreditCard, Upload, CheckCircle2, ChevronLeft, Calendar, CalendarRange, ArrowRight, ShieldCheckIcon, X, Plus, Minus, Package, Trash2 } from 'lucide-svelte';
+    import { User, Phone, Mail, MapPin, CreditCard, Upload, CheckCircle2, ChevronLeft, Calendar, CalendarRange, ArrowRight, ShieldCheckIcon, X } from 'lucide-svelte';
     import { fly, fade } from 'svelte/transition';
-    import { cart } from '@/stores/cart.svelte.js';
 
     // Assume these are passed from the catalog selection
     let { product: initialProduct = { name: "Osprey Aether 65", price: "Rp 12k/hari" } } = $props();
-
-    let product = $state({ ...initialProduct });
-    const isSoldOut = $derived(cart.items.length === 0 ? product.stock <= 0 : cart.items.every(i => i.stock <= 0));
+    
+    let product = $state({ 
+        stock: 1, // Explicitly declare to ensure deep Svelte 5 reactivity tracking
+        image_path: '',
+        ...initialProduct 
+    });
+    const isSoldOut = $derived(product.stock <= 0);
 
     // Sync with query params if available (for client-side navigation)
     $effect(() => {
@@ -20,21 +23,22 @@
         const price = urlParams.get('price');
         const stock = urlParams.get('stock');
         const image_path = urlParams.get('image_path');
-        if (id) {
-            $form.gear_id = id;
-            const priceVal = price ? parseInt(price.toString().replace(/[^0-9]/g, '')) || 0 : 0;
-            cart.addItem({
-                id: parseInt(id) || id,
-                name: name || product.name,
-                price_per_day: priceVal,
-                stock: stock !== null ? parseInt(stock) : 10,
-                image_path: image_path || ''
-            });
-        }
+        
+        if (id) $form.gear_id = id;
         if (name) product.name = name;
         if (price) product.price = price;
-        if (stock !== null) product.stock = parseInt(stock);
-        if (image_path) product.image_path = image_path;
+        
+        // Fix for "mentok": avoid parseInt("undefined") which returns NaN
+        if (stock !== null && stock !== 'undefined' && stock !== '') {
+            const parsedStock = parseInt(stock);
+            if (!isNaN(parsedStock)) {
+                product.stock = parsedStock;
+            }
+        } else if (product.stock === undefined) {
+            product.stock = 1; // Default to 1 to avoid reactivity tracking issues
+        }
+        
+        if (image_path && image_path !== 'undefined') product.image_path = image_path;
     });
 
     const form = useForm({
@@ -47,7 +51,6 @@
         transfer_file: null,
         rental_days: 1,
         quantity: 1,
-        items: '',
     });
 
     let ktpPreview = $state(null);
@@ -74,12 +77,7 @@
 
     function handleSubmit(e) {
         e.preventDefault();
-        $form.items = JSON.stringify(cart.items);
-        $form.post('/bookings', {
-            onSuccess: () => {
-                cart.clearCart();
-            }
-        });
+        $form.post('/bookings');
     }
 
     const bankDetails = {
@@ -93,9 +91,8 @@
         return parseInt(val) || 0;
     });
 
-    const totalPrice = $derived(cart.items.length > 0 ? cart.totalDailyRate * $form.rental_days : priceNumeric() * $form.rental_days * $form.quantity);
+    const totalPrice = $derived(priceNumeric() * $form.rental_days * $form.quantity);
     const calculatedDP = $derived(Math.ceil((totalPrice * 0.3) / 1000) * 1000); // 30% DP rounded to nearest 1k
-    const totalUnitsBooked = $derived(cart.items.length > 0 ? cart.totalItems : $form.quantity);
 
     function formatCurrency(amount) {
         return new Intl.NumberFormat('id-ID', {
@@ -107,7 +104,6 @@
 
     const isFormValid = $derived(
         !isSoldOut &&
-        (cart.items.length > 0 || $form.gear_id !== '') &&
         $form.name.trim() !== '' &&
         $form.phone.trim() !== '' &&
         $form.address.trim() !== '' &&
@@ -165,24 +161,16 @@
                                     </div>
                                     <div class="space-y-1.5">
                                         <label for="phone" class="text-[11px] font-black uppercase tracking-wider text-zinc-400 ml-1">WhatsApp Number</label>
-                                        <div class="relative flex items-center bg-white border border-zinc-200 rounded-xl overflow-hidden focus-within:border-primary/50 focus-within:ring-4 focus-within:ring-primary/5 transition-all h-14">
-                                            <div class="flex items-center gap-2 pl-4 pr-3.5 bg-zinc-50 border-r border-zinc-200 h-full text-zinc-700 font-bold text-xs select-none shrink-0">
-                                                <span class="text-base leading-none">🇮🇩</span>
-                                                <span class="tracking-tight">+62</span>
-                                            </div>
+                                        <div class="relative group">
+                                            <Phone class="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-300 group-focus-within:text-primary transition-colors" size={18} />
                                             <input 
                                                 type="tel" 
                                                 id="phone" 
                                                 bind:value={$form.phone} 
-                                                oninput={(e) => {
-                                                    let val = e.target.value.replace(/\D/g, '');
-                                                    if (val.startsWith('0')) val = val.substring(1);
-                                                    if (val.startsWith('62')) val = val.substring(2);
-                                                    $form.phone = val;
-                                                }}
+                                                oninput={(e) => $form.phone = e.target.value.replace(/\D/g, '')}
                                                 inputmode="numeric"
-                                                placeholder="81234567890" 
-                                                class="w-full h-full bg-transparent pl-3.5 pr-4 outline-none text-zinc-900 font-medium text-sm placeholder:text-zinc-400" 
+                                                placeholder="e.g. 0812345678" 
+                                                class="w-full h-14 bg-white border border-zinc-200 rounded-xl pl-12 pr-4 focus:border-primary/50 focus:ring-4 focus:ring-primary/5 transition-all outline-none text-zinc-900 font-medium" 
                                                 required 
                                             />
                                         </div>
@@ -280,72 +268,23 @@
                         <div class="bg-white border border-zinc-200 rounded-3xl p-8 space-y-8 sticky top-32 shadow-sm">
                             <h2 class="text-xs font-black uppercase tracking-widest text-zinc-500 border-b border-zinc-100 pb-4">Rental Summary</h2>
                             
-                            <!-- Selected Products Summary -->
-                            <div class="space-y-4">
-                                {#if cart.items.length > 0}
-                                    <div class="max-h-60 overflow-y-auto space-y-3 pr-1 divide-y divide-zinc-100">
-                                        {#each cart.items as item}
-                                            <div class="pt-3 first:pt-0 flex items-center justify-between gap-3">
-                                                <div class="flex items-center gap-3 min-w-0">
-                                                    <div class="size-12 rounded-xl bg-zinc-50 flex items-center justify-center border border-zinc-200 overflow-hidden shrink-0">
-                                                        {#if item.image_path}
-                                                            <img src="/storage/{item.image_path}" alt={item.name} class="w-full h-full object-cover" />
-                                                        {:else}
-                                                            <Package class="text-primary" size={18} />
-                                                        {/if}
-                                                    </div>
-                                                    <div class="min-w-0">
-                                                        <h4 class="font-bold text-zinc-900 text-xs truncate">{item.name}</h4>
-                                                        <p class="text-[10px] font-bold text-primary uppercase tracking-wider">{formatCurrency(item.price_per_day)} <span class="text-zinc-400 font-normal">/hari</span></p>
-                                                    </div>
-                                                </div>
-                                                <div class="flex items-center gap-1.5 shrink-0">
-                                                    <button 
-                                                        type="button"
-                                                        onclick={() => cart.updateQuantity(item.id, item.quantity - 1)}
-                                                        class="size-6 rounded-full border border-zinc-200 flex items-center justify-center hover:bg-zinc-100 text-zinc-600 text-xs font-bold"
-                                                    >-</button>
-                                                    <span class="text-xs font-bold w-5 text-center">{item.quantity}</span>
-                                                    <button 
-                                                        type="button"
-                                                        onclick={() => cart.updateQuantity(item.id, item.quantity + 1)}
-                                                        disabled={item.quantity >= (item.stock || 99)}
-                                                        class="size-6 rounded-full border border-zinc-200 flex items-center justify-center hover:bg-zinc-100 text-zinc-600 text-xs font-bold disabled:opacity-30"
-                                                    >+</button>
-                                                    <button 
-                                                        type="button"
-                                                        onclick={() => cart.removeItem(item.id)}
-                                                        class="size-6 rounded-full text-zinc-400 hover:text-red-500 flex items-center justify-center ml-1"
-                                                        title="Hapus"
-                                                    ><Trash2 size={13} /></button>
-                                                </div>
-                                            </div>
-                                        {/each}
-                                    </div>
-                                    <div class="pt-2">
-                                        <Link href="/catalog" class="text-[11px] font-bold text-primary hover:underline flex items-center gap-1">
-                                            + Tambah Alat Outdoor Lainnya
-                                        </Link>
-                                    </div>
-                                {:else}
-                                    <div class="flex items-center gap-4">
-                                        <div class="size-16 rounded-2xl bg-zinc-50 flex items-center justify-center border border-zinc-200 overflow-hidden">
-                                            {#if product.image_path}
-                                                <img src="/storage/{product.image_path}" alt={product.name} class="w-full h-full object-cover" />
-                                            {:else}
-                                                <CalendarRange class="text-primary" size={24} />
-                                            {/if}
-                                        </div>
-                                        <div class="space-y-1">
-                                            <h4 class="font-bold text-zinc-900 leading-tight {isSoldOut ? 'opacity-50' : ''}">{product.name}</h4>
-                                            <p class="text-xs font-black text-primary uppercase tracking-widest">RP {product.price}</p>
-                                        </div>
-                                    </div>
-                                {/if}
+                            <!-- Selected Product -->
+                            <div class="flex items-center gap-4">
+                                <div class="size-16 rounded-2xl bg-zinc-50 flex items-center justify-center border border-zinc-200 overflow-hidden">
+                                    {#if product.image_path}
+                                        <img src="/storage/{product.image_path}" alt={product.name} class="w-full h-full object-cover" />
+                                    {:else}
+                                        <CalendarRange class="text-primary" size={24} />
+                                    {/if}
+                                </div>
+                                <div class="space-y-1">
+                                    <h4 class="font-bold text-zinc-900 leading-tight {isSoldOut ? 'opacity-50' : ''}">{product.name}</h4>
+                                    <p class="text-xs font-black text-primary uppercase tracking-widest">RP {product.price}</p>
+                                </div>
                             </div>
 
                             <!-- Duration Selection -->
-                            <div class="space-y-4 pt-4 border-t border-zinc-100">
+                            <div class="space-y-4">
                                 <div class="flex justify-between items-center">
                                     <label class="text-[11px] font-black uppercase tracking-wider text-zinc-400">Duration</label>
                                     <span class="text-xs font-bold text-primary bg-primary/5 px-3 py-1 rounded-full">{$form.rental_days} Days</span>
@@ -364,49 +303,47 @@
                                 {/if}
                             </div>
 
-                            {#if cart.items.length === 0}
-                                <!-- Quantity Selection -->
-                                <div class="space-y-4 pt-6 border-t border-zinc-100">
-                                    <div class="flex justify-between items-center">
-                                        <div class="space-y-0.5">
-                                            <label class="text-[11px] font-black uppercase tracking-wider text-zinc-400">Quantity</label>
-                                            <p class="text-[9px] text-zinc-400 font-bold uppercase">Stock: {product.stock || 0} left</p>
-                                        </div>
-                                        <div class="flex items-center gap-3">
-                                            <button 
-                                                type="button"
-                                                onclick={() => $form.quantity = Math.max(1, $form.quantity - 1)}
-                                                class="size-8 rounded-full border border-zinc-200 flex items-center justify-center hover:bg-zinc-50 transition-colors disabled:opacity-30"
-                                                disabled={$form.quantity <= 1}
-                                            >
-                                                <span class="text-zinc-500 font-bold">-</span>
-                                            </button>
-                                            <span class="text-xs font-bold text-zinc-900 w-4 text-center">{$form.quantity}</span>
-                                            <button 
-                                                type="button"
-                                                onclick={() => $form.quantity = Math.min(product.stock || 1, $form.quantity + 1)}
-                                                class="size-8 rounded-full border border-zinc-200 flex items-center justify-center hover:bg-zinc-50 transition-colors disabled:opacity-30"
-                                                disabled={$form.quantity >= (product.stock || 1)}
-                                            >
-                                                <span class="text-zinc-500 font-bold">+</span>
-                                            </button>
-                                        </div>
+                            <!-- Quantity Selection -->
+                            <div class="space-y-4 pt-6 border-t border-zinc-100">
+                                <div class="flex justify-between items-center">
+                                    <div class="space-y-0.5">
+                                        <label class="text-[11px] font-black uppercase tracking-wider text-zinc-400">Quantity</label>
+                                        <p class="text-[9px] text-zinc-400 font-bold uppercase">Stock: {product.stock || 0} left</p>
+                                    </div>
+                                    <div class="flex items-center gap-3">
+                                        <button 
+                                            type="button"
+                                            onclick={() => $form.quantity = Math.max(1, $form.quantity - 1)}
+                                            class="size-8 rounded-full border border-zinc-200 flex items-center justify-center hover:bg-zinc-50 transition-colors disabled:opacity-30"
+                                            disabled={$form.quantity <= 1}
+                                        >
+                                            <span class="text-zinc-500 font-bold">-</span>
+                                        </button>
+                                        <span class="text-xs font-bold text-zinc-900 w-4 text-center">{$form.quantity}</span>
+                                        <button 
+                                            type="button"
+                                            onclick={() => $form.quantity = Math.min(product.stock || 1, $form.quantity + 1)}
+                                            class="size-8 rounded-full border border-zinc-200 flex items-center justify-center hover:bg-zinc-50 transition-colors disabled:opacity-30"
+                                            disabled={$form.quantity >= (product.stock || 1)}
+                                        >
+                                            <span class="text-zinc-500 font-bold">+</span>
+                                        </button>
                                     </div>
                                 </div>
-                            {/if}
+                            </div>
 
                             <!-- Price Breakdown -->
                             <div class="space-y-3 pt-6 border-t border-zinc-100">
                                 <div class="flex justify-between text-xs">
                                     <span class="text-zinc-500 font-medium">Daily Rate</span>
-                                    <span class="text-zinc-900 font-bold">{formatCurrency(cart.items.length > 0 ? cart.totalDailyRate : priceNumeric() * $form.quantity)}</span>
+                                    <span class="text-zinc-900 font-bold">RP {product.price}</span>
                                 </div>
                                 <div class="flex justify-between text-xs">
-                                    <span class="text-zinc-500 font-medium">Total Units</span>
-                                    <span class="text-zinc-900 font-bold">{totalUnitsBooked} Unit(s)</span>
+                                    <span class="text-zinc-500 font-medium">Units Booked</span>
+                                    <span class="text-zinc-900 font-bold">{$form.quantity} Unit(s)</span>
                                 </div>
                                 <div class="flex justify-between text-xs">
-                                    <span class="text-zinc-500 font-medium">Total Price ({$form.rental_days} Days)</span>
+                                    <span class="text-zinc-500 font-medium">Total Price</span>
                                     <span class="text-zinc-900 font-black">{formatCurrency(totalPrice)}</span>
                                 </div>
                             </div>
