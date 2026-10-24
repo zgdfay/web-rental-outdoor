@@ -23,7 +23,12 @@ class BookingController extends Controller
             'rental_days' => 'required|integer|min:1',
             'ktp_file' => 'required|image|max:2048',
             'transfer_file' => 'required|image|max:2048',
+            'dp_percentage' => 'nullable|integer|min:30|max:100',
         ]);
+
+        $dpPercent = intval($request->input('dp_percentage', 30));
+        if ($dpPercent < 30) $dpPercent = 30;
+        if ($dpPercent > 100) $dpPercent = 100;
 
         $items = [];
         if ($request->filled('items')) {
@@ -53,9 +58,11 @@ class BookingController extends Controller
             $phoneFormatted = '0' . $phoneFormatted;
         }
 
-        [$totalRemaining, $totalQty, $bookedItemsSummary] = DB::transaction(function () use ($items, $request, $phoneFormatted, $ktp_path, $transfer_path) {
+        [$totalRemaining, $totalQty, $totalPriceAll, $totalDpAll, $bookedItemsSummary] = DB::transaction(function () use ($items, $request, $phoneFormatted, $ktp_path, $transfer_path, $dpPercent) {
             $totalRemaining = 0;
             $totalQty = 0;
+            $totalPriceAll = 0;
+            $totalDpAll = 0;
             $bookedItemsSummary = [];
 
             foreach ($items as $item) {
@@ -71,8 +78,10 @@ class BookingController extends Controller
                 }
 
                 $total_price = $gear->price_per_day * $request->rental_days * $qty;
-                $dp_amount = ceil(($total_price * 0.3) / 1000) * 1000;
-                $remaining = $total_price - $dp_amount;
+                $dp_amount = ($dpPercent >= 100)
+                    ? $total_price
+                    : ceil(($total_price * ($dpPercent / 100)) / 1000) * 1000;
+                $remaining = max(0, $total_price - $dp_amount);
 
                 Booking::create([
                     'user_id' => Auth::id(),
@@ -92,6 +101,8 @@ class BookingController extends Controller
                     'status' => 'pending',
                 ]);
 
+                $totalPriceAll += $total_price;
+                $totalDpAll += $dp_amount;
                 $totalRemaining += $remaining;
                 $totalQty += $qty;
                 $bookedItemsSummary[] = [
@@ -99,10 +110,11 @@ class BookingController extends Controller
                     'quantity' => $qty,
                     'price_per_day' => $gear->price_per_day,
                     'total_price' => $total_price,
+                    'dp_amount' => $dp_amount,
                 ];
             }
 
-            return [$totalRemaining, $totalQty, $bookedItemsSummary];
+            return [$totalRemaining, $totalQty, $totalPriceAll, $totalDpAll, $bookedItemsSummary];
         });
 
         $productNames = implode(', ', array_column($bookedItemsSummary, 'name'));
@@ -114,13 +126,17 @@ class BookingController extends Controller
             $productNames,
             $totalQty,
             $request->rental_days,
-            $totalRemaining
+            $totalRemaining,
+            $totalDpAll,
+            $totalPriceAll
         );
 
         return to_route('booking.success', [
             'product_name' => $productNames,
             'rental_days' => $request->rental_days,
             'quantity' => $totalQty,
+            'total_price' => $totalPriceAll,
+            'dp_amount' => $totalDpAll,
             'remaining_balance' => $totalRemaining,
             'name' => $request->name,
             'phone' => $phoneFormatted,

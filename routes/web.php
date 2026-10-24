@@ -53,10 +53,13 @@ Route::get('/booking/success', function () {
         'product_name' => request('product_name'),
         'rental_days' => request('rental_days'),
         'quantity' => request('quantity', 1),
+        'total_price' => request('total_price'),
+        'dp_amount' => request('dp_amount'),
         'remaining_balance' => request('remaining_balance'),
         'name' => request('name'),
         'phone' => request('phone'),
         'address' => request('address'),
+        'booked_items' => request('booked_items', []),
     ]);
 })->name('booking.success');
 

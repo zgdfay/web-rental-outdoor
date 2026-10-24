@@ -45,15 +45,23 @@ class WhatsAppService
     /**
      * Notification sent automatically when user submits booking (/booking form).
      */
-    public static function sendBookingConfirmation($phone, $name, $productNames, $quantity, $rentalDays, $remainingBalance)
+    public static function sendBookingConfirmation($phone, $name, $productNames, $quantity, $rentalDays, $remainingBalance, $dpAmount = 0, $totalPrice = 0)
     {
         $sisa = number_format($remainingBalance, 0, ',', '.');
         $text = "🏕️ *OUTDOOR SPECIES - KONFIRMASI BOOKING* 🏕️\n\n"
               . "Halo kak *{$name}*,\n"
               . "Terima kasih telah melakukan pemesanan alat outdoor di toko kami! Berikut adalah ringkasan pesanan Anda:\n\n"
               . "📦 *Alat Dipesan*: {$productNames} ({$quantity} unit)\n"
-              . "⏱️ *Durasi Sewa*: {$rentalDays} Hari\n"
-              . "💰 *Sisa Pelunasan*: *Rp {$sisa}* (Dibayar saat pengambilan alat)\n\n"
+              . "⏱️ *Durasi Sewa*: {$rentalDays} Hari\n";
+
+        if ($totalPrice > 0) {
+            $text .= "🏷️ *Total Biaya*: *Rp " . number_format($totalPrice, 0, ',', '.') . "*\n";
+        }
+        if ($dpAmount > 0) {
+            $text .= "💵 *DP Ditransfer*: *Rp " . number_format($dpAmount, 0, ',', '.') . "*\n";
+        }
+
+        $text .= "💰 *Sisa Pelunasan*: *Rp {$sisa}* (" . ($remainingBalance <= 0 ? "LUNAS" : "Dibayar saat pengambilan alat") . ")\n\n"
               . "📋 *Catatan Pengambilan*:\n"
               . "- Mohon membawa *KTP Asli* sebagai jaminan identitas.\n"
               . "- Tunjukkan pesan ini atau bukti booking saat tiba di toko Outdoor Species.\n\n"

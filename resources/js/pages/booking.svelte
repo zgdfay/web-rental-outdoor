@@ -2,7 +2,7 @@
     import { Link, useForm, router } from '@inertiajs/svelte';
     import Navbar from '@/components/layout/navbar.svelte';
     import Footer from '@/components/layout/footer.svelte';
-    import { User, Phone, Mail, MapPin, CreditCard, Upload, CheckCircle2, ChevronLeft, Calendar, CalendarRange, ArrowRight, ShieldCheckIcon, X } from 'lucide-svelte';
+    import { User, Phone, Mail, MapPin, CreditCard, Upload, CheckCircle2, ChevronLeft, Calendar, CalendarRange, ArrowRight, ShieldCheckIcon, X, Copy, Check } from 'lucide-svelte';
     import { fly, fade } from 'svelte/transition';
 
     // Assume these are passed from the catalog selection
@@ -51,10 +51,22 @@
         transfer_file: null,
         rental_days: 1,
         quantity: 1,
+        dp_percentage: 30,
     });
 
     let ktpPreview = $state(null);
     let transferPreview = $state(null);
+    let copiedField = $state(null);
+
+    function copyToClipboard(text, field) {
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(text);
+            copiedField = field;
+            setTimeout(() => {
+                if (copiedField === field) copiedField = null;
+            }, 2000);
+        }
+    }
 
     function handleFileChange(e, field) {
         const file = e.target.files[0];
@@ -92,7 +104,26 @@
     });
 
     const totalPrice = $derived(priceNumeric() * $form.rental_days * $form.quantity);
-    const calculatedDP = $derived(Math.ceil((totalPrice * 0.3) / 1000) * 1000); // 30% DP rounded to nearest 1k
+
+    // Macam pilihan skema pembayaran DP
+    const dpTiers = [
+        { percentage: 30, label: 'DP 30%', desc: 'Standar Minimum', badge: 'Standar' },
+        { percentage: 50, label: 'DP 50%', desc: 'Setengah Biaya', badge: 'Disarankan' },
+        { percentage: 100, label: 'Lunas 100%', desc: 'Bayar Penuh', badge: 'Bebas Antre' },
+    ];
+
+    function calculateTierAmount(percentage) {
+        if (percentage >= 100) return totalPrice;
+        return Math.ceil((totalPrice * (percentage / 100)) / 1000) * 1000;
+    }
+
+    const calculatedDP = $derived(
+        $form.dp_percentage >= 100
+            ? totalPrice
+            : Math.ceil((totalPrice * ($form.dp_percentage / 100)) / 1000) * 1000
+    );
+
+    const remainingBalance = $derived(Math.max(0, totalPrice - calculatedDP));
 
     function formatCurrency(amount) {
         return new Intl.NumberFormat('id-ID', {
@@ -219,7 +250,12 @@
                                     </div>
                                     <!-- Transfer Upload -->
                                     <div class="space-y-3">
-                                        <p class="text-xs font-bold uppercase tracking-wider text-zinc-400 ml-1">Upload DP Transfer Proof</p>
+                                        <div class="flex items-center justify-between ml-1">
+                                            <p class="text-xs font-bold uppercase tracking-wider text-zinc-400">Upload Bukti Transfer</p>
+                                            <span class="text-[10px] font-black text-primary bg-primary/10 px-2.5 py-0.5 rounded-full">
+                                                Transfer: {formatCurrency(calculatedDP)}
+                                            </span>
+                                        </div>
                                         {#if transferPreview}
                                             <div class="relative w-full h-48 rounded-2xl overflow-hidden border border-zinc-200 group" in:fade>
                                                 <img src={transferPreview} alt="Transfer Proof Preview" class="w-full h-full object-cover" />
@@ -332,45 +368,148 @@
                                 </div>
                             </div>
 
+                            <!-- Macam Pilihan Skema DP -->
+                            <div class="space-y-3 pt-6 border-t border-zinc-100">
+                                <div class="flex justify-between items-center">
+                                    <div class="space-y-0.5">
+                                        <label class="text-[11px] font-black uppercase tracking-wider text-zinc-400">Pilihan Skema DP</label>
+                                        <p class="text-[9px] text-zinc-400 font-medium">Pilih besaran uang muka yang ingin dibayar</p>
+                                    </div>
+                                    <span class="text-[10px] font-black text-primary bg-primary/10 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                                        {$form.dp_percentage === 100 ? 'Lunas 100%' : `DP ${$form.dp_percentage}%`}
+                                    </span>
+                                </div>
+                                <div class="grid grid-cols-3 gap-2">
+                                    {#each dpTiers as tier}
+                                        <button
+                                            type="button"
+                                            onclick={() => $form.dp_percentage = tier.percentage}
+                                            class="p-2.5 rounded-2xl border text-left transition-all relative flex flex-col justify-between {$form.dp_percentage === tier.percentage 
+                                                ? 'border-primary bg-primary/5 ring-2 ring-primary/20 shadow-sm' 
+                                                : 'border-zinc-200 bg-white hover:border-zinc-300 hover:bg-zinc-50/50'}"
+                                        >
+                                            <div class="space-y-1">
+                                                <div class="flex items-center justify-between">
+                                                    <span class="text-[10px] font-black uppercase tracking-wider {$form.dp_percentage === tier.percentage ? 'text-primary' : 'text-zinc-500'}">
+                                                        {tier.label}
+                                                    </span>
+                                                    {#if $form.dp_percentage === tier.percentage}
+                                                        <span class="size-1.5 rounded-full bg-primary animate-pulse"></span>
+                                                    {/if}
+                                                </div>
+                                                <p class="text-[11px] font-black text-zinc-900 leading-tight">
+                                                    {formatCurrency(calculateTierAmount(tier.percentage))}
+                                                </p>
+                                            </div>
+                                            <span class="text-[8px] font-bold mt-2 px-1.5 py-0.5 rounded w-fit {$form.dp_percentage === tier.percentage ? 'bg-primary text-white shadow-xs' : 'bg-zinc-100 text-zinc-500'}">
+                                                {tier.badge}
+                                            </span>
+                                        </button>
+                                    {/each}
+                                </div>
+                            </div>
+
                             <!-- Price Breakdown -->
                             <div class="space-y-3 pt-6 border-t border-zinc-100">
                                 <div class="flex justify-between text-xs">
-                                    <span class="text-zinc-500 font-medium">Daily Rate</span>
-                                    <span class="text-zinc-900 font-bold">RP {product.price}</span>
+                                    <span class="text-zinc-500 font-medium">Tarif Sewa Harian</span>
+                                    <span class="text-zinc-900 font-bold">RP {product.price} / hari</span>
                                 </div>
                                 <div class="flex justify-between text-xs">
-                                    <span class="text-zinc-500 font-medium">Units Booked</span>
-                                    <span class="text-zinc-900 font-bold">{$form.quantity} Unit(s)</span>
+                                    <span class="text-zinc-500 font-medium">Durasi Sewa</span>
+                                    <span class="text-zinc-900 font-bold">{$form.rental_days} Hari</span>
                                 </div>
                                 <div class="flex justify-between text-xs">
-                                    <span class="text-zinc-500 font-medium">Total Price</span>
+                                    <span class="text-zinc-500 font-medium">Jumlah Unit</span>
+                                    <span class="text-zinc-900 font-bold">{$form.quantity} Unit</span>
+                                </div>
+                                <div class="flex justify-between text-xs pb-1">
+                                    <span class="text-zinc-500 font-medium">Total Biaya Sewa</span>
                                     <span class="text-zinc-900 font-black">{formatCurrency(totalPrice)}</span>
+                                </div>
+
+                                <div class="pt-3 border-t border-dashed border-zinc-200 space-y-2">
+                                    <div class="flex justify-between items-center text-xs">
+                                        <div class="flex items-center gap-1.5">
+                                            <span class="text-zinc-900 font-bold">Total DP yang Harus Dibayar</span>
+                                            <span class="text-[9px] font-black text-primary bg-primary/10 px-1.5 py-0.5 rounded">
+                                                {$form.dp_percentage}%
+                                            </span>
+                                        </div>
+                                        <span class="text-primary font-black text-sm">{formatCurrency(calculatedDP)}</span>
+                                    </div>
+                                    <div class="flex justify-between items-center text-xs">
+                                        <span class="text-zinc-500 font-medium">Sisa Pelunasan di Toko</span>
+                                        {#if remainingBalance > 0}
+                                            <span class="text-zinc-800 font-black">{formatCurrency(remainingBalance)}</span>
+                                        {:else}
+                                            <span class="text-green-600 font-black bg-green-50 px-2 py-0.5 rounded-md text-[10px]">LUNAS (Rp 0)</span>
+                                        {/if}
+                                    </div>
                                 </div>
                             </div>
 
                             <!-- Payment Info -->
                             <div class="space-y-6 pt-6 border-t border-zinc-100">
-                                <div class="p-6 bg-zinc-50 rounded-2xl border border-zinc-200 space-y-5 relative overflow-hidden">
-                                    <div class="absolute top-0 right-0 p-3">
-                                        <CreditCard size={32} class="text-zinc-200/50" />
+                                <div class="p-6 bg-zinc-50 rounded-2xl border border-zinc-200 space-y-5 relative overflow-hidden shadow-inner">
+                                    <div class="absolute top-0 right-0 p-3 opacity-10">
+                                        <CreditCard size={48} class="text-zinc-900" />
                                     </div>
                                     <div class="space-y-1">
-                                        <h5 class="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400">Transfer To</h5>
+                                        <h5 class="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400">Transfer Pembayaran Ke</h5>
                                         <p class="text-xs font-bold text-zinc-700">{bankDetails.bank}</p>
                                     </div>
                                     <div class="space-y-1">
-                                        <p class="text-2xl font-black text-zinc-900 tracking-tight">{bankDetails.accountNumber}</p>
+                                        <div class="flex items-center gap-2">
+                                            <p class="text-2xl font-black text-zinc-900 tracking-tight font-mono">{bankDetails.accountNumber}</p>
+                                            <button 
+                                                type="button" 
+                                                onclick={() => copyToClipboard(bankDetails.accountNumber.replace(/\s+/g, ''), 'account')}
+                                                class="size-8 rounded-lg border border-zinc-200 bg-white hover:bg-zinc-100 flex items-center justify-center text-zinc-600 transition-colors shadow-xs"
+                                                title="Salin No. Rekening"
+                                            >
+                                                {#if copiedField === 'account'}
+                                                    <Check size={14} class="text-green-600" />
+                                                {:else}
+                                                    <Copy size={14} />
+                                                {/if}
+                                            </button>
+                                        </div>
                                         <p class="text-[10px] font-black text-zinc-400 uppercase italic">A/N: {bankDetails.accountHolder}</p>
                                     </div>
-                                    <div class="pt-2 flex items-center justify-between">
-                                        <div class="px-4 py-2 rounded-xl bg-primary text-white flex flex-col shadow-lg shadow-primary/20">
-                                            <span class="text-[8px] font-black uppercase tracking-widest opacity-80">Down Payment (30%)</span>
-                                            <span class="text-sm font-black tracking-tight">{formatCurrency(calculatedDP)}</span>
+                                    <div class="pt-2">
+                                        <div class="p-4 rounded-xl bg-primary text-white space-y-1.5 shadow-lg shadow-primary/20">
+                                            <div class="flex items-center justify-between">
+                                                <span class="text-[9px] font-black uppercase tracking-widest opacity-90">
+                                                    Total Transfer ({$form.dp_percentage === 100 ? 'LUNAS 100%' : `DP ${$form.dp_percentage}%`})
+                                                </span>
+                                                <button 
+                                                    type="button" 
+                                                    onclick={() => copyToClipboard(calculatedDP.toString(), 'amount')}
+                                                    class="text-[9px] font-bold uppercase tracking-wider bg-white/20 hover:bg-white/30 px-2 py-0.5 rounded transition-colors flex items-center gap-1"
+                                                >
+                                                    {#if copiedField === 'amount'}
+                                                        <Check size={12} /> Tersalin
+                                                    {:else}
+                                                        <Copy size={12} /> Salin
+                                                    {/if}
+                                                </button>
+                                            </div>
+                                            <div class="text-2xl font-black tracking-tight">{formatCurrency(calculatedDP)}</div>
+                                            {#if remainingBalance > 0}
+                                                <p class="text-[10px] opacity-85 pt-1 border-t border-white/20 leading-relaxed">
+                                                    Sisa <b>{formatCurrency(remainingBalance)}</b> dilunasi saat pengambilan alat di toko.
+                                                </p>
+                                            {:else}
+                                                <p class="text-[10px] opacity-95 pt-1 border-t border-white/20 leading-relaxed text-emerald-100 font-semibold">
+                                                    ✓ Pembayaran Lunas! Tidak ada biaya tambahan saat pengambilan alat.
+                                                </p>
+                                            {/if}
                                         </div>
                                     </div>
                                 </div>
                                 <p class="text-[10px] text-zinc-400 leading-relaxed font-medium italic text-center">
-                                    *Note: Secure your gear with DP. The rest is paid on pickup.
+                                    *Pastikan transfer sesuai nominal DP di atas untuk mempercepat verifikasi oleh staff kami.
                                 </p>
                             </div>
                         </div>

@@ -3,7 +3,7 @@
     import { CheckCircle2, ChevronLeft, ShieldCheckIcon, InfoIcon, MapPinIcon, MessageSquare } from 'lucide-svelte';
     import { fly } from 'svelte/transition';
 
-    let { product_name, rental_days, quantity, remaining_balance, name, phone, address, booked_items = [] } = $props();
+    let { product_name, rental_days, quantity, total_price, dp_amount, remaining_balance, name, phone, address, booked_items = [] } = $props();
 
     const today = new Date();
     const returnDate = new Date();
@@ -14,7 +14,7 @@
     }
 
     function formatCurrency(amount) {
-        if (!amount) return 'RP 0';
+        if (!amount && amount !== 0) return 'RP 0';
         return new Intl.NumberFormat('id-ID', {
             style: 'currency',
             currency: 'IDR',
@@ -39,7 +39,9 @@
                `⏱️ *Durasi Sewa*: ${rental_days} Hari\n` +
                `📅 *Ambil*: ${formatDate(today)}\n` +
                `📅 *Kembali*: ${formatDate(returnDate)}\n` +
-               `💰 *Sisa Pelunasan*: *${formatCurrency(remaining_balance)}* (Dibayar saat pengambilan alat)\n\n` +
+               (total_price ? `🏷️ *Total Biaya*: *${formatCurrency(total_price)}*\n` : '') +
+               (dp_amount ? `💵 *Total DP Ditransfer*: *${formatCurrency(dp_amount)}*\n` : '') +
+               `💰 *Sisa Pelunasan*: *${formatCurrency(remaining_balance)}* (${Number(remaining_balance) <= 0 ? 'LUNAS' : 'Dibayar saat pengambilan alat'})\n\n` +
                `Mohon membawa KTP Asli saat pengambilan alat di toko Outdoor Species.`;
     });
 </script>
@@ -109,9 +111,25 @@
                                     <span class="text-sm text-zinc-500 font-medium">Duration</span>
                                     <span class="text-sm text-zinc-900 font-bold">{rental_days} Days</span>
                                 </div>
-                                <div class="flex justify-between pt-2">
-                                    <span class="text-sm text-zinc-500 font-medium">Remaining</span>
-                                    <span class="text-lg text-zinc-900 font-black">{formatCurrency(remaining_balance)}</span>
+                                {#if total_price}
+                                    <div class="flex justify-between border-b border-zinc-200/50 pb-3">
+                                        <span class="text-sm text-zinc-500 font-medium">Total Biaya Sewa</span>
+                                        <span class="text-sm text-zinc-900 font-bold">{formatCurrency(total_price)}</span>
+                                    </div>
+                                {/if}
+                                {#if dp_amount}
+                                    <div class="flex justify-between border-b border-zinc-200/50 pb-3">
+                                        <span class="text-sm text-primary font-bold">Total DP Ditransfer</span>
+                                        <span class="text-sm text-primary font-black">{formatCurrency(dp_amount)}</span>
+                                    </div>
+                                {/if}
+                                <div class="flex justify-between pt-2 items-center">
+                                    <span class="text-sm text-zinc-500 font-medium">Sisa Pelunasan</span>
+                                    {#if Number(remaining_balance) <= 0}
+                                        <span class="text-xs font-black uppercase text-green-600 bg-green-100/70 px-3 py-1 rounded-full">LUNAS</span>
+                                    {:else}
+                                        <span class="text-lg text-zinc-900 font-black">{formatCurrency(remaining_balance)}</span>
+                                    {/if}
                                 </div>
                             </div>
                         </div>
