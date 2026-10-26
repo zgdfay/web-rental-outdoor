@@ -77,6 +77,7 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->group(function () {
     Route::put('/gears/{gear}', [AdminGearController::class, 'update'])->name('admin.gears.update');
     Route::delete('/gears/{gear}', [AdminGearController::class, 'destroy'])->name('admin.gears.destroy');
     Route::get('/reports', [AdminReportController::class, 'index'])->name('admin.reports');
+    Route::get('/reports/export', [AdminReportController::class, 'export'])->name('admin.reports.export');
     Route::get('/bookings', function () { return redirect()->route('staff.bookings'); })->name('admin.bookings');
 });
 

@@ -4,6 +4,7 @@
     import { TrendingUp, Printer, Download, Calendar, Search, Filter, DollarSign, CreditCard, AlertTriangle, CheckCircle2, RotateCcw, Package } from 'lucide-svelte';
     import { fly, fade } from 'svelte/transition';
     import * as Select from "@/components/ui/select/index.js";
+    import { toast } from 'svelte-sonner';
 
     let { bookings = [], stats = {}, filters = {} } = $props();
 
@@ -38,34 +39,17 @@
         router.get('/admin/reports', {}, { preserveState: true, preserveScroll: true });
     }
 
+    const exportUrl = $derived(() => {
+        const params = new URLSearchParams();
+        if (startDate) params.append('start_date', startDate);
+        if (endDate) params.append('end_date', endDate);
+        if (statusFilter && statusFilter !== 'all') params.append('status', statusFilter);
+        if (searchQuery) params.append('search', searchQuery);
+        return `/admin/reports/export?${params.toString()}`;
+    });
+
     function exportToCSV() {
-        const headers = ['ID Booking', 'Tanggal', 'Customer', 'No HP', 'Alamat', 'Item Sewa', 'Durasi (Hari)', 'Total Harga', 'DP', 'Pelunasan', 'Denda', 'Status'];
-        const rows = filteredBookings.map(b => [
-            `#${b.id}`,
-            new Date(b.created_at).toLocaleDateString('id-ID'),
-            `"${(b.customer_name || '').replace(/"/g, '""')}"`,
-            `"${b.customer_phone || ''}"`,
-            `"${(b.customer_address || '').replace(/"/g, '""')}"`,
-            `"${(b.gear?.name || '').replace(/"/g, '""')} (x${b.quantity || 1})"`,
-            b.rental_days || 1,
-            b.total_price || 0,
-            b.dp_amount || 0,
-            b.remaining_balance || 0,
-            b.fine_amount || 0,
-            b.status || ''
-        ]);
-
-        let csvContent = "data:text/csv;charset=utf-8," 
-            + headers.join(",") + "\n"
-            + rows.map(e => e.join(",")).join("\n");
-
-        const encodedUri = encodeURI(csvContent);
-        const link = document.createElement("a");
-        link.setAttribute("href", encodedUri);
-        link.setAttribute("download", `Laporan_Pendapatan_OutdoorSpecies_${new Date().toISOString().slice(0,10)}.csv`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        window.location.href = exportUrl();
     }
 
     function printReport() {
@@ -99,14 +83,13 @@
                     <p class="text-sm text-zinc-500">Pantau transaksi, omset penyewaan, pelunasan, dan denda keterlambatan.</p>
                 </div>
                 <div class="flex items-center gap-3">
-                    <button 
-                        type="button"
-                        onclick={exportToCSV}
-                        class="flex items-center gap-2 bg-white border border-zinc-200 text-zinc-800 px-4 py-2.5 rounded-lg font-semibold text-xs uppercase tracking-wider hover:bg-zinc-50 transition-all shadow-sm"
+                    <a 
+                        href={exportUrl()}
+                        class="flex items-center gap-2 bg-white border border-zinc-200 text-zinc-800 px-4 py-2.5 rounded-lg font-semibold text-xs uppercase tracking-wider hover:bg-zinc-50 transition-all shadow-sm cursor-pointer"
                     >
                         <Download size={16} />
                         Export CSV
-                    </button>
+                    </a>
                     <button 
                         type="button"
                         onclick={printReport}
