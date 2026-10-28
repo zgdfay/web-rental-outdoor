@@ -863,10 +863,9 @@
         {/if}
 
         <div class="border-t border-dashed border-black my-1.5"></div>
-        {@const grandTotal = (printingBooking.total_price || 0) + (printingBooking.fine_amount || 0)}
         <div class="flex justify-between font-bold text-sm">
             <span>TOTAL AKHIR</span>
-            <span>{formatRupiah(grandTotal)}</span>
+            <span>{formatRupiah((printingBooking.total_price || 0) + (printingBooking.fine_amount || 0))}</span>
         </div>
         <div class="flex justify-between text-xs text-zinc-600 font-medium">
             <span>Sisa Tagihan</span>
