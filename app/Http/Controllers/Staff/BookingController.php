@@ -40,7 +40,8 @@ class BookingController extends Controller
                 $startDate = now();
                 $booking->update([
                     'status' => 'handed_over',
-                    'start_date' => $startDate
+                    'start_date' => $startDate,
+                    'remaining_balance' => 0, // Pelunasan dilakukan saat serah terima barang di kasir
                 ]);
 
                 $dueDate = $startDate->copy()->addDays($booking->rental_days);
@@ -51,7 +52,7 @@ class BookingController extends Controller
                     $dueDate
                 );
 
-                return back()->with('success', 'Items handed over. Stock updated.');
+                return back()->with('success', 'Barang berhasil diserahterimakan. Sisa sewa dilunasi (balance Rp 0) dan stok diperbarui.');
             }
             return back()->with('error', 'Insufficient stock for this order.');
         });
@@ -59,15 +60,26 @@ class BookingController extends Controller
 
     public function processReturn(Request $request, Booking $booking)
     {
-        $fine = DB::transaction(function () use ($booking) {
+        $request->validate([
+            'damage_fee' => 'nullable|numeric|min:0',
+            'damage_notes' => 'nullable|string|max:1000',
+        ]);
+
+        $damageFee = intval($request->input('damage_fee', 0));
+        $damageNotes = $request->input('damage_notes');
+
+        $result = DB::transaction(function () use ($booking, $damageFee, $damageNotes) {
             $returnDate = now();
             $dueDate = Carbon::parse($booking->start_date)->addDays($booking->rental_days);
 
-            $fineCalc = 0;
+            $lateFine = 0;
             if ($returnDate->gt($dueDate)) {
                 $daysLate = $returnDate->diffInDays($dueDate);
-                $fineCalc = $daysLate * ($booking->gear->price_per_day * 1.5); // 1.5x penalty
+                $pricePerDay = $booking->gear ? $booking->gear->price_per_day : 0;
+                $lateFine = $daysLate * ($pricePerDay * 1.5); // 1.5x penalty
             }
+
+            $totalFine = $lateFine + $damageFee;
 
             // Lock gear to safely increase stock back
             $gear = Gear::where('id', $booking->gear_id)->lockForUpdate()->firstOrFail();
@@ -76,21 +88,37 @@ class BookingController extends Controller
             $booking->update([
                 'status' => 'returned',
                 'end_date' => $returnDate,
-                'fine_amount' => $fineCalc,
+                'fine_amount' => $totalFine,
+                'damage_fee' => $damageFee,
+                'damage_notes' => $damageNotes,
+                'remaining_balance' => 0, // Barang sudah dikembalikan, saldo sewa pokok balance 0
             ]);
 
-            return $fineCalc;
+            return [
+                'total_fine' => $totalFine,
+                'late_fine' => $lateFine,
+                'damage_fee' => $damageFee,
+                'damage_notes' => $damageNotes
+            ];
         });
 
         WhatsAppService::sendReturnConfirmation(
             $booking->customer_phone,
             $booking->customer_name,
-            $booking->gear->name . " (" . ($booking->quantity ?: 1) . "x)",
-            $fine
+            ($booking->gear->name ?? 'Alat Outdoor') . " (" . ($booking->quantity ?: 1) . "x)",
+            $result['total_fine'],
+            $result['damage_fee'],
+            $result['damage_notes']
         );
 
-        return back()->with('success', $fine > 0 
-            ? 'Return processed. Fine calculated: Rp ' . number_format($fine) 
-            : 'Return processed successfully.');
+        $msg = 'Pengembalian barang berhasil diproses.';
+        if ($result['total_fine'] > 0) {
+            $parts = [];
+            if ($result['late_fine'] > 0) $parts[] = 'Denda telat: Rp ' . number_format($result['late_fine']);
+            if ($result['damage_fee'] > 0) $parts[] = 'Biaya kerusakan: Rp ' . number_format($result['damage_fee']);
+            $msg .= ' Total denda/ganti rugi: Rp ' . number_format($result['total_fine']) . ' (' . implode(', ', $parts) . ').';
+        }
+
+        return back()->with('success', $msg);
     }
 }

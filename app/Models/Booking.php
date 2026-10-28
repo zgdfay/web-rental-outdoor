@@ -22,6 +22,8 @@ class Booking extends Model
         'remaining_balance',
         'quantity',
         'fine_amount',
+        'damage_fee',
+        'damage_notes',
         'status',
     ];
 

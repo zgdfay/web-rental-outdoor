@@ -21,12 +21,22 @@
     
     let printingBooking = $state(null);
     let bluetoothDevice = $state(null);
+    let returnModal = $state({
+        open: false,
+        booking: null,
+        condition: 'good',
+        damage_fee: 0,
+        damage_notes: '',
+        lateDays: 0,
+        lateFine: 0,
+        submitting: false
+    });
 
     const filteredBookings = $derived.by(() => {
         return bookings.filter(booking => {
             const search = searchQuery.toLowerCase();
-            const matchesSearch = booking.customer_name.toLowerCase().includes(search) || 
-                                 booking.gear.name.toLowerCase().includes(search) ||
+            const matchesSearch = (booking.customer_name || '').toLowerCase().includes(search) || 
+                                 (booking.gear?.name || '').toLowerCase().includes(search) ||
                                  booking.id.toString().includes(search);
             
             const matchesStatus = statusFilter === 'all' || booking.status === statusFilter;
@@ -132,21 +142,41 @@
         payload.push(...encoder.encode("DETAIL SEWA\n"));
         payload.push(...escBoldOff);
         const qty = booking.quantity || 1;
-        payload.push(...encoder.encode(`${booking.gear.name}\n`));
+        payload.push(...encoder.encode(`${booking.gear?.name || 'Item Sewa'}\n`));
         payload.push(...encoder.encode(`  Qty      : x${qty}\n`));
         payload.push(...encoder.encode(`  Periode  : ${formatSimpleDate(booking.start_date)} - ${formatDueDate(booking)}\n`));
         payload.push(...encoder.encode(`  Durasi   : ${booking.rental_days} Hari\n`));
         payload.push(...encoder.encode("================================\n"));
 
+        const pelunasan = Math.max(0, (booking.total_price || 0) - (booking.dp_amount || 0));
+        const sisaBalance = (booking.status === 'handed_over' || booking.status === 'returned' || booking.remaining_balance <= 0) ? 0 : (booking.remaining_balance || 0);
+        const damageFee = Number(booking.damage_fee) || 0;
+        const totalFine = Number(booking.fine_amount) || 0;
+        const lateFine = Math.max(0, totalFine - damageFee);
+        const grandTotal = (booking.total_price || 0) + totalFine;
+
         payload.push(...escBoldOn);
-        payload.push(...encoder.encode("PEMBAYARAN\n"));
+        payload.push(...encoder.encode("RINCIAN PEMBAYARAN\n"));
         payload.push(...escBoldOff);
-        payload.push(...encoder.encode(`Total       : ${formatRupiah(booking.total_price)}\n`));
-        payload.push(...encoder.encode(`DP Dibayar  : ${formatRupiah(booking.dp_amount)}\n`));
-        payload.push(...encoder.encode(`Pelunasan   : ${formatRupiah(booking.remaining_balance)}\n`));
-        if (booking.fine_amount && booking.fine_amount > 0) {
-            payload.push(...encoder.encode(`Denda       : ${formatRupiah(booking.fine_amount)}\n`));
+        payload.push(...encoder.encode(`Biaya Sewa  : ${formatRupiah(booking.total_price)}\n`));
+        payload.push(...encoder.encode(`DP Masuk    : ${formatRupiah(booking.dp_amount)}\n`));
+        payload.push(...encoder.encode(`Pelunasan   : ${formatRupiah(pelunasan)}\n`));
+        
+        if (damageFee > 0) {
+            payload.push(...encoder.encode(`Biaya Rusak : ${formatRupiah(damageFee)}\n`));
         }
+        if (booking.damage_notes) {
+            payload.push(...encoder.encode(`Ket. Rusak  : ${booking.damage_notes.substring(0, 30)}\n`));
+        }
+        if (lateFine > 0) {
+            payload.push(...encoder.encode(`Denda Telat : ${formatRupiah(lateFine)}\n`));
+        }
+        
+        payload.push(...encoder.encode("--------------------------------\n"));
+        payload.push(...escBoldOn);
+        payload.push(...encoder.encode(`TOTAL AKHIR : ${formatRupiah(grandTotal)}\n`));
+        payload.push(...escBoldOff);
+        payload.push(...encoder.encode(`Sisa Tagihan: ${formatRupiah(sisaBalance)}\n`));
         payload.push(...encoder.encode("--------------------------------\n"));
         payload.push(...escBoldOn);
         const statusText = booking.status === 'returned' ? 'SELESAI (RETURNED)' : 'LUNAS (HANDED OVER)';
@@ -212,21 +242,67 @@
     function handoverItems(booking) {
         showConfirm(
             'Confirm Handover', 
-            'Confirm gear handover to customer? This will officially start the rental period.', 
+            'Confirm gear handover to customer? Sisa sewa akan dilunasi dan struk akan dicetak.', 
             () => router.post(`/staff/bookings/${booking.id}/handover`, {}, {
                 onSuccess: () => {
-                    printReceipt(booking);
+                    const updated = { ...booking, status: 'handed_over', remaining_balance: 0 };
+                    printReceipt(updated);
                 }
             })
         );
     }
 
-    function processReturn(id) {
-        showConfirm(
-            'Process Return', 
-            'Receive items back? Any late returns will automatically calculate a fine.', 
-            () => router.post(`/staff/bookings/${id}/return`)
-        );
+    function openReturnModal(booking) {
+        const dueDate = getDueDate(booking);
+        let lateDays = 0;
+        let lateFine = 0;
+        if (dueDate && new Date() > dueDate) {
+            const diffTime = Math.abs(new Date() - dueDate);
+            lateDays = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+            const price = booking.gear ? booking.gear.price_per_day : 0;
+            lateFine = lateDays * (price * 1.5);
+        }
+
+        returnModal = {
+            open: true,
+            booking,
+            condition: 'good',
+            damage_fee: 0,
+            damage_notes: '',
+            lateDays,
+            lateFine,
+            submitting: false
+        };
+    }
+
+    function submitReturn() {
+        if (!returnModal.booking) return;
+        returnModal.submitting = true;
+        const b = returnModal.booking;
+        const damageFee = returnModal.condition === 'damaged' ? (Number(returnModal.damage_fee) || 0) : 0;
+        const damageNotes = returnModal.condition === 'damaged' ? returnModal.damage_notes : null;
+
+        router.post(`/staff/bookings/${b.id}/return`, {
+            damage_fee: damageFee,
+            damage_notes: damageNotes
+        }, {
+            onSuccess: () => {
+                const totalFine = (returnModal.lateFine || 0) + damageFee;
+                const updated = {
+                    ...b,
+                    status: 'returned',
+                    remaining_balance: 0,
+                    fine_amount: totalFine,
+                    damage_fee: damageFee,
+                    damage_notes: damageNotes
+                };
+                returnModal.open = false;
+                printReceipt(updated);
+            },
+            onFinish: () => {
+                returnModal.submitting = false;
+            }
+        });
     }
 
     function getStatusStyle(status) {
@@ -388,7 +464,7 @@
                                         <div class="space-y-0.5">
                                             <p class="text-sm font-semibold text-zinc-900">{booking.customer_name}</p>
                                             <div class="flex items-center gap-2">
-                                                <p class="text-[10px] text-primary font-bold uppercase tracking-wider">{booking.gear.name}</p>
+                                                <p class="text-[10px] text-primary font-bold uppercase tracking-wider">{booking.gear?.name || 'Item Sewa'}</p>
                                                 <span class="text-[9px] font-black bg-zinc-100 text-zinc-500 px-1.5 py-0.5 rounded border border-zinc-200">
                                                     QTY: {booking.quantity || 1}
                                                 </span>
@@ -417,12 +493,27 @@
                                     </span>
                                 </td>
                                 <td class="px-6 py-4">
-                                    <div class="space-y-0.5">
-                                        <p class="text-xs font-semibold text-zinc-500">Remaining: <span class="text-zinc-900">{formatCurrency(booking.remaining_balance)}</span></p>
-                                        {#if booking.fine_amount > 0}
-                                            <p class="text-[10px] font-bold text-red-600 uppercase tracking-tight">Fine: {formatCurrency(booking.fine_amount)}</p>
+                                    <div class="space-y-1">
+                                        {#if booking.status === 'handed_over' || booking.status === 'returned' || booking.remaining_balance <= 0}
+                                            <div class="flex items-center gap-1.5">
+                                                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                                    LUNAS
+                                                </span>
+                                                <span class="text-xs font-semibold text-zinc-500">Balance: <span class="text-zinc-900 font-bold">Rp 0</span></span>
+                                            </div>
+                                            {#if booking.fine_amount > 0}
+                                                <p class="text-[10px] font-bold text-red-600 uppercase tracking-tight">Total Denda: {formatCurrency(booking.fine_amount)}</p>
+                                            {:else}
+                                                <p class="text-[10px] font-bold text-emerald-600 uppercase tracking-tight">Pelunasan Selesai</p>
+                                            {/if}
+                                            {#if booking.damage_notes}
+                                                <p class="text-[9px] font-bold text-red-700 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded w-fit max-w-[200px] truncate" title={booking.damage_notes}>
+                                                    ⚠️ {booking.damage_notes}
+                                                </p>
+                                            {/if}
                                         {:else}
-                                            <p class="text-[10px] font-bold text-emerald-600 uppercase tracking-tight">Payment Verified</p>
+                                            <p class="text-xs font-semibold text-zinc-500">Sisa Tagihan: <span class="text-zinc-900 font-bold">{formatCurrency(booking.remaining_balance)}</span></p>
+                                            <p class="text-[10px] font-bold text-amber-600 uppercase tracking-tight">Belum Lunas (Bayar di Toko)</p>
                                         {/if}
                                     </div>
                                 </td>
@@ -474,8 +565,8 @@
                                                 Print Struk
                                             </button>
                                             <button 
-                                                onclick={() => processReturn(booking.id)}
-                                                class="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white rounded-md text-[10px] font-bold uppercase tracking-wider hover:bg-primary/90 transition-all"
+                                                onclick={() => openReturnModal(booking)}
+                                                class="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white rounded-md text-[10px] font-bold uppercase tracking-wider hover:bg-primary/90 transition-all shadow-xs"
                                             >
                                                 <RotateCcw size={12} />
                                                 Return
@@ -586,6 +677,111 @@
             </Dialog.Footer>
         </Dialog.Content>
     </Dialog.Root>
+
+    <!-- Return & Inspection Dialog -->
+    <Dialog.Root bind:open={returnModal.open}>
+        <Dialog.Content class="max-w-[480px]">
+            <Dialog.Header>
+                <Dialog.Title class="flex items-center gap-2 text-zinc-900 font-bold">
+                    <RotateCcw size={18} class="text-primary" />
+                    Pemeriksaan & Pengembalian Alat
+                </Dialog.Title>
+                <Dialog.Description class="text-xs text-zinc-500">
+                    Inspeksi kelengkapan & kondisi #{returnModal.booking?.id} ({returnModal.booking?.gear?.name || 'Alat Outdoor'}) milik {returnModal.booking?.customer_name}.
+                </Dialog.Description>
+            </Dialog.Header>
+
+            <div class="space-y-4 my-2 text-sm">
+                <!-- Info Keterlambatan -->
+                {#if returnModal.lateDays > 0}
+                    <div class="p-3 bg-red-50 border border-red-200 rounded-xl space-y-1">
+                        <div class="flex justify-between items-center text-red-700 font-bold text-xs">
+                            <span>Terlambat {returnModal.lateDays} Hari</span>
+                            <span>{formatRupiah(returnModal.lateFine)}</span>
+                        </div>
+                        <p class="text-[11px] text-red-600">Denda keterlambatan 1.5x tarif sewa otomatis dihitung.</p>
+                    </div>
+                {:else}
+                    <div class="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between text-emerald-800 text-xs font-semibold">
+                        <span>Status Waktu: Tepat Waktu</span>
+                        <span class="font-bold">Denda Telat: Rp 0</span>
+                    </div>
+                {/if}
+
+                <!-- Pilihan Kondisi Barang -->
+                <div class="space-y-2">
+                    <label class="text-xs font-bold text-zinc-700 uppercase tracking-wider">Kondisi Fisik Perlengkapan</label>
+                    <div class="grid grid-cols-2 gap-3">
+                        <button 
+                            type="button"
+                            onclick={() => { returnModal.condition = 'good'; returnModal.damage_fee = 0; returnModal.damage_notes = ''; }}
+                            class="p-3 rounded-xl border text-left transition-all {returnModal.condition === 'good' ? 'border-emerald-600 bg-emerald-50 ring-2 ring-emerald-500/20 text-emerald-900 font-bold' : 'border-zinc-200 hover:bg-zinc-50 text-zinc-600'}"
+                        >
+                            <span class="block text-xs uppercase tracking-wider">🟢 Normal / Lengkap</span>
+                            <span class="text-[11px] font-normal text-zinc-500 mt-0.5 block">Tidak ada kerusakan</span>
+                        </button>
+                        <button 
+                            type="button"
+                            onclick={() => { returnModal.condition = 'damaged'; }}
+                            class="p-3 rounded-xl border text-left transition-all {returnModal.condition === 'damaged' ? 'border-red-600 bg-red-50 ring-2 ring-red-500/20 text-red-900 font-bold' : 'border-zinc-200 hover:bg-zinc-50 text-zinc-600'}"
+                        >
+                            <span class="block text-xs uppercase tracking-wider">🔴 Rusak / Hilang</span>
+                            <span class="text-[11px] font-normal text-zinc-500 mt-0.5 block">Perlu ganti rugi/catatan</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Form Kerusakan jika 'damaged' -->
+                {#if returnModal.condition === 'damaged'}
+                    <div class="p-4 bg-zinc-50 rounded-xl border border-zinc-200 space-y-3">
+                        <div class="space-y-1.5">
+                            <label class="text-xs font-bold text-zinc-700">Biaya Ganti Rugi / Perbaikan (Rp)</label>
+                            <input 
+                                type="number" 
+                                min="0" 
+                                step="1000"
+                                bind:value={returnModal.damage_fee}
+                                placeholder="e.g. 50000" 
+                                class="w-full h-10 bg-white border border-zinc-200 rounded-lg px-3 text-sm font-bold text-zinc-900 focus:border-red-400 outline-none"
+                            />
+                        </div>
+                        <div class="space-y-1.5">
+                            <label class="text-xs font-bold text-zinc-700">Catatan Kerusakan / Komponen Hilang</label>
+                            <textarea 
+                                bind:value={returnModal.damage_notes}
+                                rows="2"
+                                placeholder="Contoh: Frame tenda patah 1 ruas, pasak kurang 2 pcs"
+                                class="w-full bg-white border border-zinc-200 rounded-lg p-2.5 text-xs text-zinc-900 focus:border-red-400 outline-none leading-relaxed"
+                            ></textarea>
+                        </div>
+                    </div>
+                {/if}
+
+                <!-- Total Tagihan Denda -->
+                <div class="border-t border-dashed border-zinc-200 pt-3 flex justify-between items-center">
+                    <div>
+                        <p class="text-xs font-bold text-zinc-900">Total Denda & Ganti Rugi</p>
+                        <p class="text-[10px] text-zinc-400 font-medium">Denda telat + Biaya kerusakan</p>
+                    </div>
+                    <span class="text-lg font-black {(returnModal.lateFine + (returnModal.condition === 'damaged' ? Number(returnModal.damage_fee) || 0 : 0)) > 0 ? 'text-red-600' : 'text-zinc-900'}">
+                        {formatRupiah((returnModal.lateFine || 0) + (returnModal.condition === 'damaged' ? Number(returnModal.damage_fee) || 0 : 0))}
+                    </span>
+                </div>
+            </div>
+
+            <Dialog.Footer class="mt-4 flex gap-2">
+                <Button variant="outline" class="flex-grow" onclick={() => returnModal.open = false}>Batal</Button>
+                <Button 
+                    variant="default" 
+                    class="flex-grow bg-primary text-white hover:bg-primary/90" 
+                    disabled={returnModal.submitting}
+                    onclick={submitReturn}
+                >
+                    {returnModal.submitting ? 'Memproses...' : 'Proses Return & Cetak'}
+                </Button>
+            </Dialog.Footer>
+        </Dialog.Content>
+    </Dialog.Root>
 </div>
 
 {#if printingBooking}
@@ -617,7 +813,7 @@
     <div class="mb-3">
         <div class="font-bold mb-1.5 text-[10px] uppercase tracking-wider">Detail Sewa</div>
         <div class="flex justify-between font-bold">
-            <span>{printingBooking.gear.name}</span>
+            <span>{printingBooking.gear?.name || 'Item Sewa'}</span>
             <span>x{printingBooking.quantity || 1}</span>
         </div>
         <div class="flex justify-between mt-1">
@@ -632,26 +828,52 @@
 
     <!-- Pembayaran -->
     <div class="border-t border-dashed border-black pt-3 mb-3 space-y-1">
-        <div class="font-bold mb-1.5 text-[10px] uppercase tracking-wider">Pembayaran</div>
+        <div class="font-bold mb-1.5 text-[10px] uppercase tracking-wider">Rincian Pembayaran</div>
         <div class="flex justify-between">
-            <span>Total Harga</span>
+            <span>Biaya Sewa</span>
             <span>{formatRupiah(printingBooking.total_price)}</span>
         </div>
         <div class="flex justify-between">
-            <span>DP Dibayar</span>
+            <span>DP Masuk</span>
             <span>{formatRupiah(printingBooking.dp_amount)}</span>
         </div>
         <div class="flex justify-between">
-            <span>Pelunasan</span>
-            <span>{formatRupiah(printingBooking.remaining_balance)}</span>
+            <span>Pelunasan Toko</span>
+            <span>{formatRupiah(Math.max(0, (printingBooking.total_price || 0) - (printingBooking.dp_amount || 0)))}</span>
         </div>
-        {#if printingBooking.fine_amount && printingBooking.fine_amount > 0}
-            <div class="flex justify-between text-red-600 font-bold">
-                <span>Denda Keterlambatan</span>
-                <span>{formatRupiah(printingBooking.fine_amount)}</span>
+        {#if printingBooking.damage_fee && printingBooking.damage_fee > 0}
+            <div class="flex justify-between text-red-600">
+                <span>Biaya Kerusakan</span>
+                <span class="font-bold">{formatRupiah(printingBooking.damage_fee)}</span>
             </div>
         {/if}
-        <div class="border-t border-dashed border-black my-1"></div>
+        {#if printingBooking.damage_notes}
+            <div class="text-[9px] text-red-600 italic">
+                <span>Ket. Rusak: {printingBooking.damage_notes}</span>
+            </div>
+        {/if}
+        {#if printingBooking.fine_amount && printingBooking.fine_amount > 0}
+            {@const lateFine = Math.max(0, (printingBooking.fine_amount || 0) - (printingBooking.damage_fee || 0))}
+            {#if lateFine > 0}
+                <div class="flex justify-between text-amber-600">
+                    <span>Denda Keterlambatan</span>
+                    <span>{formatRupiah(lateFine)}</span>
+                </div>
+            {/if}
+        {/if}
+
+        <div class="border-t border-dashed border-black my-1.5"></div>
+        {@const grandTotal = (printingBooking.total_price || 0) + (printingBooking.fine_amount || 0)}
+        <div class="flex justify-between font-bold text-sm">
+            <span>TOTAL AKHIR</span>
+            <span>{formatRupiah(grandTotal)}</span>
+        </div>
+        <div class="flex justify-between text-xs text-zinc-600 font-medium">
+            <span>Sisa Tagihan</span>
+            <span class="font-bold">{(printingBooking.status === 'handed_over' || printingBooking.status === 'returned' || printingBooking.remaining_balance <= 0) ? 'Rp 0 (LUNAS)' : formatRupiah(printingBooking.remaining_balance)}</span>
+        </div>
+
+        <div class="border-t border-dashed border-black my-1.5"></div>
         <div class="flex justify-between font-bold text-sm">
             <span>STATUS</span>
             <span>{printingBooking.status === 'returned' ? 'SELESAI (RETURNED)' : 'LUNAS'}</span>

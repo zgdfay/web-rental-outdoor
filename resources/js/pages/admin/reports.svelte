@@ -142,18 +142,28 @@
                         </div>
                     </div>
                     <p class="text-2xl font-black text-zinc-900">{formatCurrency(stats.total_remaining)}</p>
-                    <p class="text-[11px] text-zinc-400 font-medium">Sisa tagihan sewa dilunasi</p>
+                    <p class="text-[11px] text-zinc-400 font-medium">
+                        Pelunasan toko yang telah diterima
+                        {#if stats.total_unpaid > 0}
+                            <span class="text-amber-600 font-bold block mt-0.5">({formatCurrency(stats.total_unpaid)} belum diambil)</span>
+                        {/if}
+                    </p>
                 </div>
 
                 <div class="bg-white border border-zinc-200 p-6 rounded-2xl shadow-sm space-y-2 relative overflow-hidden">
                     <div class="flex items-center justify-between">
-                        <p class="text-[10px] font-black uppercase tracking-widest text-zinc-400">Denda Keterlambatan</p>
+                        <p class="text-[10px] font-black uppercase tracking-widest text-zinc-400">Denda & Ganti Rugi</p>
                         <div class="size-8 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center">
                             <AlertTriangle size={16} />
                         </div>
                     </div>
                     <p class="text-2xl font-black {stats.total_fines > 0 ? 'text-amber-600' : 'text-zinc-900'}">{formatCurrency(stats.total_fines)}</p>
-                    <p class="text-[11px] text-zinc-400 font-medium">Dari {stats.completed_rentals || 0} penyewaan selesai</p>
+                    <p class="text-[11px] text-zinc-400 font-medium">
+                        Dari {stats.completed_rentals || 0} penyewaan selesai
+                        {#if stats.total_damage_fees > 0}
+                            <span class="text-red-600 font-bold block mt-0.5">(Ganti rugi rusak: {formatCurrency(stats.total_damage_fees)})</span>
+                        {/if}
+                    </p>
                 </div>
             </div>
 
@@ -239,9 +249,10 @@
                                 <th class="px-6 py-4">Alat Sewa</th>
                                 <th class="px-6 py-4">Durasi</th>
                                 <th class="px-6 py-4">Total Sewa</th>
-                                <th class="px-6 py-4">DP (30%)</th>
-                                <th class="px-6 py-4">Pelunasan</th>
-                                <th class="px-6 py-4">Denda</th>
+                                <th class="px-6 py-4">DP Masuk</th>
+                                <th class="px-6 py-4">Pelunasan Toko</th>
+                                <th class="px-6 py-4">Sisa Balance</th>
+                                <th class="px-6 py-4">Denda & Kerusakan</th>
                                 <th class="px-6 py-4 text-right">Status</th>
                             </tr>
                         </thead>
@@ -281,10 +292,37 @@
                                         {formatCurrency(b.dp_amount)}
                                     </td>
                                     <td class="px-6 py-4.5 whitespace-nowrap font-bold text-zinc-800">
-                                        {formatCurrency(b.remaining_balance)}
+                                        {#if b.status === 'handed_over' || b.status === 'returned' || b.remaining_balance <= 0}
+                                            <span class="text-emerald-700 font-bold">{formatCurrency(Math.max(0, b.total_price - b.dp_amount))}</span>
+                                        {:else}
+                                            <span class="text-zinc-400 text-xs italic">Menunggu Serah Terima</span>
+                                        {/if}
                                     </td>
-                                    <td class="px-6 py-4.5 whitespace-nowrap font-black {b.fine_amount > 0 ? 'text-amber-600' : 'text-zinc-300'}">
-                                        {b.fine_amount > 0 ? formatCurrency(b.fine_amount) : '-'}
+                                    <td class="px-6 py-4.5 whitespace-nowrap">
+                                        {#if b.status === 'handed_over' || b.status === 'returned' || b.remaining_balance <= 0}
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                                Rp 0 (Lunas)
+                                            </span>
+                                        {:else}
+                                            <span class="text-amber-600 font-bold">{formatCurrency(b.remaining_balance)}</span>
+                                        {/if}
+                                    </td>
+                                    <td class="px-6 py-4.5 whitespace-nowrap">
+                                        {#if b.fine_amount > 0}
+                                            <div class="space-y-0.5">
+                                                <span class="text-sm font-black text-amber-600">{formatCurrency(b.fine_amount)}</span>
+                                                {#if b.damage_fee > 0}
+                                                    <p class="text-[10px] text-red-600 font-bold">Biaya Rusak: {formatCurrency(b.damage_fee)}</p>
+                                                {/if}
+                                                {#if b.damage_notes}
+                                                    <p class="text-[10px] text-zinc-500 font-medium italic max-w-[170px] truncate" title={b.damage_notes}>
+                                                        📝 {b.damage_notes}
+                                                    </p>
+                                                {/if}
+                                            </div>
+                                        {:else}
+                                            <span class="text-zinc-300 font-bold">-</span>
+                                        {/if}
                                     </td>
                                     <td class="px-6 py-4.5 text-right whitespace-nowrap">
                                         {#if b.status === 'returned'}

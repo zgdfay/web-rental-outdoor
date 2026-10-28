@@ -50,6 +50,7 @@ Route::post('/bookings', [BookingController::class, 'store'])->name('bookings.st
 
 Route::get('/booking/success', function () {
     return Inertia::render('booking-success', [
+        'booking_id' => request('booking_id'),
         'product_name' => request('product_name'),
         'rental_days' => request('rental_days'),
         'quantity' => request('quantity', 1),

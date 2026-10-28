@@ -91,11 +91,23 @@ class WhatsAppService
     /**
      * Notification sent when gear is returned.
      */
-    public static function sendReturnConfirmation($phone, $name, $productNames, $fineAmount = 0)
+    public static function sendReturnConfirmation($phone, $name, $productNames, $fineAmount = 0, $damageFee = 0, $damageNotes = null)
     {
-        $dendaInfo = $fineAmount > 0 
-            ? "⚠️ *Denda Keterlambatan*: Rp " . number_format($fineAmount, 0, ',', '.') . "\n\n" 
-            : "";
+        $dendaInfo = '';
+        if ($fineAmount > 0 || $damageFee > 0 || !empty($damageNotes)) {
+            $dendaInfo .= "📋 *Rincian Pengembalian*:\n";
+            $lateFine = max(0, $fineAmount - $damageFee);
+            if ($lateFine > 0) {
+                $dendaInfo .= "- Denda Keterlambatan: Rp " . number_format($lateFine, 0, ',', '.') . "\n";
+            }
+            if ($damageFee > 0) {
+                $dendaInfo .= "- Biaya Kerusakan/Ganti Rugi: Rp " . number_format($damageFee, 0, ',', '.') . "\n";
+            }
+            if (!empty($damageNotes)) {
+                $dendaInfo .= "- Catatan Kondisi: {$damageNotes}\n";
+            }
+            $dendaInfo .= "💰 *Total Tagihan Denda*: *Rp " . number_format($fineAmount, 0, ',', '.') . "*\n\n";
+        }
 
         $text = "🏕️ *OUTDOOR SPECIES - ALAT TELAH DIKEMBALIKAN* 🏕️\n\n"
               . "Halo kak *{$name}*,\n"

@@ -45,16 +45,30 @@ class ReportController extends Controller
         $bookings = $query->get();
 
         // Calculate metrics from relevant transactions (handed_over, returned, validated, or even pending)
-        // Usually revenue counts confirmed/handed over/returned orders
         $revenueBookings = $bookings->filter(function ($b) {
             return in_array($b->status, ['validated', 'handed_over', 'returned']);
         });
 
+        // Pelunasan yang sudah dilunasi/diterima di kasir toko (handed_over atau returned)
+        $settledBookings = $revenueBookings->filter(function ($b) {
+            return in_array($b->status, ['handed_over', 'returned']);
+        });
+        $totalSettlement = $settledBookings->sum(function ($b) {
+            return max(0, $b->total_price - $b->dp_amount);
+        });
+
+        // Sisa tagihan belum lunas (pending/validated yang belum serah terima)
+        $pendingBalance = $revenueBookings->filter(function ($b) {
+            return in_array($b->status, ['pending', 'validated']);
+        })->sum('remaining_balance');
+
         $stats = [
             'total_revenue' => $revenueBookings->sum('total_price'),
             'total_dp' => $revenueBookings->sum('dp_amount'),
-            'total_remaining' => $revenueBookings->sum('remaining_balance'),
+            'total_remaining' => $totalSettlement, // Total pelunasan sewa yang diterima di kasir
+            'total_unpaid' => $pendingBalance,     // Sisa tagihan tertunda yang belum dilunasi
             'total_fines' => $bookings->where('status', 'returned')->sum('fine_amount'),
+            'total_damage_fees' => $bookings->where('status', 'returned')->sum('damage_fee'),
             'total_transactions' => $bookings->count(),
             'completed_rentals' => $bookings->where('status', 'returned')->count(),
         ];
@@ -145,12 +159,23 @@ class ReportController extends Controller
                 'Durasi (Hari)',
                 'Total Harga (Rp)',
                 'DP (Rp)',
-                'Pelunasan (Rp)',
-                'Denda (Rp)',
+                'Pelunasan Toko (Rp)',
+                'Sisa Tagihan / Balance (Rp)',
+                'Denda Telat (Rp)',
+                'Biaya Kerusakan (Rp)',
+                'Catatan Kerusakan',
+                'Total Denda (Rp)',
                 'Status'
             ]);
 
             foreach ($bookings as $b) {
+                $isSettled = in_array($b->status, ['handed_over', 'returned']) || $b->remaining_balance <= 0;
+                $pelunasanToko = $isSettled ? max(0, $b->total_price - $b->dp_amount) : 0;
+                $sisaBalance = $isSettled ? 0 : ($b->remaining_balance ?: 0);
+                $damageFee = $b->damage_fee ?: 0;
+                $totalFine = $b->fine_amount ?: 0;
+                $lateFine = max(0, $totalFine - $damageFee);
+
                 fputcsv($handle, [
                     'BO-' . $b->id,
                     $b->created_at ? $b->created_at->format('d/m/Y') : '-',
@@ -162,8 +187,12 @@ class ReportController extends Controller
                     $b->rental_days ?: 1,
                     $b->total_price ?: 0,
                     $b->dp_amount ?: 0,
-                    $b->remaining_balance ?: 0,
-                    $b->fine_amount ?: 0,
+                    $pelunasanToko,
+                    $sisaBalance,
+                    $lateFine,
+                    $damageFee,
+                    str_replace(["\r", "\n"], ' ', $b->damage_notes ?: '-'),
+                    $totalFine,
                     $b->status ?: '-'
                 ]);
             }

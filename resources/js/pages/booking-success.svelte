@@ -3,7 +3,7 @@
     import { CheckCircle2, ChevronLeft, ShieldCheckIcon, InfoIcon, MapPinIcon, MessageSquare } from 'lucide-svelte';
     import { fly } from 'svelte/transition';
 
-    let { product_name, rental_days, quantity, total_price, dp_amount, remaining_balance, name, phone, address, booked_items = [] } = $props();
+    let { booking_id, product_name, rental_days, quantity, total_price, dp_amount, remaining_balance, name, phone, address, booked_items = [] } = $props();
 
     const today = new Date();
     const returnDate = new Date();
@@ -61,7 +61,7 @@
                     </div>
                     <div class="space-y-2">
                         <h1 class="text-4xl font-black tracking-tight text-zinc-900 leading-none uppercase">Booking Success!</h1>
-                        <p class="text-zinc-500 font-semibold uppercase text-xs">No. Booking: #BO-{Math.floor(Math.random() * 90000) + 10000}</p>
+                        <p class="text-zinc-500 font-semibold uppercase text-xs">No. Booking: #BO-{booking_id ? booking_id : Math.floor(Math.random() * 90000) + 10000}</p>
                     </div>
                 </div>
 

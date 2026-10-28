@@ -58,12 +58,13 @@ class BookingController extends Controller
             $phoneFormatted = '0' . $phoneFormatted;
         }
 
-        [$totalRemaining, $totalQty, $totalPriceAll, $totalDpAll, $bookedItemsSummary] = DB::transaction(function () use ($items, $request, $phoneFormatted, $ktp_path, $transfer_path, $dpPercent) {
+        [$totalRemaining, $totalQty, $totalPriceAll, $totalDpAll, $bookedItemsSummary, $firstBookingId] = DB::transaction(function () use ($items, $request, $phoneFormatted, $ktp_path, $transfer_path, $dpPercent) {
             $totalRemaining = 0;
             $totalQty = 0;
             $totalPriceAll = 0;
             $totalDpAll = 0;
             $bookedItemsSummary = [];
+            $firstBookingId = null;
 
             foreach ($items as $item) {
                 $gearId = $item['gear_id'] ?? $item['id'];
@@ -83,7 +84,7 @@ class BookingController extends Controller
                     : ceil(($total_price * ($dpPercent / 100)) / 1000) * 1000;
                 $remaining = max(0, $total_price - $dp_amount);
 
-                Booking::create([
+                $createdBooking = Booking::create([
                     'user_id' => Auth::id(),
                     'gear_id' => $gear->id,
                     'quantity' => $qty,
@@ -101,6 +102,10 @@ class BookingController extends Controller
                     'status' => 'pending',
                 ]);
 
+                if (!$firstBookingId) {
+                    $firstBookingId = $createdBooking->id;
+                }
+
                 $totalPriceAll += $total_price;
                 $totalDpAll += $dp_amount;
                 $totalRemaining += $remaining;
@@ -114,7 +119,7 @@ class BookingController extends Controller
                 ];
             }
 
-            return [$totalRemaining, $totalQty, $totalPriceAll, $totalDpAll, $bookedItemsSummary];
+            return [$totalRemaining, $totalQty, $totalPriceAll, $totalDpAll, $bookedItemsSummary, $firstBookingId];
         });
 
         $productNames = implode(', ', array_column($bookedItemsSummary, 'name'));
@@ -132,6 +137,7 @@ class BookingController extends Controller
         );
 
         return to_route('booking.success', [
+            'booking_id' => $firstBookingId,
             'product_name' => $productNames,
             'rental_days' => $request->rental_days,
             'quantity' => $totalQty,

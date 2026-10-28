@@ -40,12 +40,8 @@ class DashboardController extends Controller
             return inertia('staff/dashboard', [
                 'stats' => [
                     'pending' => Booking::where('status', 'pending')->count(),
-                    'handover' => Booking::where('status', 'confirmed')
-                        ->whereDate('start_date', now())
-                        ->count(),
-                    'returns' => Booking::where('status', 'handover')
-                        ->whereDate('end_date', '<=', now())
-                        ->count(),
+                    'handover' => Booking::where('status', 'validated')->count(),
+                    'returns' => Booking::where('status', 'handed_over')->count(),
                 ]
             ]);
         }
